@@ -10,7 +10,14 @@ lazy-load attributes, CSS backgrounds, pseudo-elements, inline SVG, canvas,
 video posters, Shadow DOM and iframes. You can then filter, preview, analyze,
 de-duplicate, convert and bulk-download them, individually or as one ZIP file.
 
-## Install (development)
+## Download a ready-made build
+
+Pre-built packages are committed in [`dist/`](dist). You don't need to build anything:
+
+- **Unpacked folders** to load directly: `dist/chrome`, `dist/edge`, `dist/brave`, `dist/opera`, `dist/vivaldi`, `dist/firefox`, `dist/safari`
+- **Store-ready zips**: `dist/image-scraper-pro-<browser>-1.0.0.zip`
+
+## Build from source
 
 ```bash
 npm run build          # builds every browser into dist/<browser>/ plus store-ready zips

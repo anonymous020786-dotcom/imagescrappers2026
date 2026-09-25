@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Image Scraper Pro</title>
+  <link rel="stylesheet" href="../lib/theme.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="../icons/icon32.png" alt="" width="22" height="22">
+    <div class="title">
+      <strong>Image Scraper Pro</strong>
+      <span id="page" class="muted">Scanning…</span>
+    </div>
+    <button id="options" title="Settings" aria-label="Settings">⚙</button>
+  </header>
+
+  <section class="stats">
+    <div><b id="count">–</b><span class="muted">images</span></div>
+    <div><b id="large">–</b><span class="muted">≥ 300px</span></div>
+    <div><b id="frames">–</b><span class="muted">frames</span></div>
+  </section>
+
+  <div id="preview" class="preview"></div>
+  <p id="error" class="error hidden"></p>
+
+  <section class="actions">
+    <button id="open" class="primary">Open scraper</button>
+    <button id="quick" title="Download every image that passes your default filters">Quick download all</button>
+    <button id="pick" title="Click an area of the page to scrape only images inside it">Pick area</button>
+    <button id="scroll" title="Scroll the page to trigger lazy loading, then open the scraper">Auto-scroll + scan</button>
+    <button id="alltabs" title="Scrape every tab in this window">All tabs</button>
+    <button id="history">History</button>
+  </section>
+  <footer class="muted">Alt+Shift+O dashboard · Alt+Shift+D quick download</footer>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
