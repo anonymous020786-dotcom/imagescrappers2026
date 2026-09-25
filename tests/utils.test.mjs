@@ -138,7 +138,7 @@ test('exports escape values', () => {
 
 test('reverseSearchUrl encodes the image URL', () => {
   assert.equal(reverseSearchUrl('tineye', 'https://x.com/a b.png'), 'https://tineye.com/search?url=https%3A%2F%2Fx.com%2Fa%20b.png');
-  assert.match(reverseSearchUrl('nope', 'https://x.com/a.png'), /^https:\/\/lens\.google\.com/);
+  assert.match(reverseSearchUrl('nope', 'https://x.com/a.png'), /^https:\/\/lens\.google\.com\//);
 });
 
 test('mapLimit respects concurrency and captures errors', async () => {

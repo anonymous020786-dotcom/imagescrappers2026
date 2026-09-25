@@ -3,7 +3,7 @@ import { applyTheme, loadSettings } from '../lib/settings.js';
 import { Crawler } from '../lib/crawler.js';
 import { extractUrls } from '../lib/crawl.js';
 import { expandPattern } from '../lib/urlgen.js';
-import { guessType, safeImageSrc, toText } from '../lib/utils.js';
+import { guessType, toText } from '../lib/utils.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -107,10 +107,16 @@ function renderStats(s) {
 function addThumbs(images) {
   const box = $('thumbs');
   for (const img of images.filter((i) => !i.url.startsWith('data:')).slice(-40)) {
-    const src = safeImageSrc(img.url);
-    if (!src) continue;
+    // Only http(s) URLs become thumbnails (URLs here can come from typed input).
+    let parsed;
+    try {
+      parsed = new URL(img.url);
+    } catch {
+      continue;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') continue;
     const el = document.createElement('img');
-    el.src = src;
+    el.src = parsed.href;
     el.loading = 'lazy';
     el.alt = img.alt || '';
     el.title = img.url;
