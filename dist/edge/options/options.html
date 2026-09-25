@@ -38,6 +38,10 @@
           <label><input type="checkbox" name="allFrames"> Inside iframes</label>
           <label><input type="checkbox" name="ignoreQueryForDedupe"> Treat URLs that differ only in ?query as duplicates</label>
         </div>
+        <div class="grid">
+          <label>Max elements examined per page (0 = unlimited) <input type="number" name="maxScanElements" min="0" step="1000"></label>
+          <label>Max images per page (0 = unlimited) <input type="number" name="maxScanResults" min="0" step="100"></label>
+        </div>
       </fieldset>
 
       <fieldset>
@@ -98,6 +102,18 @@
       </fieldset>
 
       <fieldset>
+        <legend>Large downloads</legend>
+        <div class="grid">
+          <label>Retries per image <input type="number" name="retries" min="0" max="10"></label>
+          <label>Delay between downloads (ms) <input type="number" name="requestDelay" min="0" max="60000" step="50"></label>
+          <label>ZIP part size (MB, max 3900) <input type="number" name="zipPartSizeMB" min="1" max="3900" step="1"></label>
+        </div>
+        <label class="row"><input type="checkbox" name="skipDownloaded"> Skip images I've downloaded before</label>
+        <label class="row"><input type="checkbox" name="sendReferer"> Send the page as Referer (fixes hotlink-protected images)</label>
+        <p class="muted small">Downloaded so far: <span id="logSize">…</span> images. <button type="button" id="clearLog">Clear download log</button></p>
+      </fieldset>
+
+      <fieldset>
         <legend>Interface</legend>
         <div class="grid">
           <label>Theme
@@ -116,6 +132,7 @@
             </select>
           </label>
           <label>History entries to keep <input type="number" name="historyLimit" min="0" max="200"></label>
+          <label>Image URLs per history entry (0 = all) <input type="number" name="historyImageLimit" min="0" step="1000"></label>
           <label>Duplicate sensitivity (0–20 bits) <input type="number" name="duplicateThreshold" min="0" max="20"></label>
         </div>
         <label class="row"><input type="checkbox" name="showBadge"> Show the image count on the toolbar icon</label>

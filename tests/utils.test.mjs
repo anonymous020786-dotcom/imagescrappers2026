@@ -138,7 +138,7 @@ test('exports escape values', () => {
 
 test('reverseSearchUrl encodes the image URL', () => {
   assert.equal(reverseSearchUrl('tineye', 'https://x.com/a b.png'), 'https://tineye.com/search?url=https%3A%2F%2Fx.com%2Fa%20b.png');
-  assert.match(reverseSearchUrl('nope', 'https://x.com/a.png'), /^https:\/\/lens\.google\.com/);
+  assert.match(reverseSearchUrl('nope', 'https://x.com/a.png'), /^https:\/\/lens\.google\.com\//);
 });
 
 test('mapLimit respects concurrency and captures errors', async () => {
@@ -155,4 +155,17 @@ test('mapLimit respects concurrency and captures errors', async () => {
   assert.equal(peak, 2);
   assert.equal(res[0], 2);
   assert.equal(res[2].error.message, 'boom');
+});
+
+test('safeImageSrc only allows image-safe schemes', async () => {
+  const { safeImageSrc } = await import('../src/lib/utils.js');
+  assert.equal(safeImageSrc('https://x.com/a.png'), 'https://x.com/a.png');
+  assert.equal(safeImageSrc('data:image/png;base64,AA'), 'data:image/png;base64,AA');
+  assert.equal(safeImageSrc('blob:https://x.com/1'), 'blob:https://x.com/1');
+  assert.equal(safeImageSrc('javascript:alert(1)'), null);
+  assert.equal(safeImageSrc(' JavaScript:alert(1)'), null);
+  assert.equal(safeImageSrc('vbscript:msgbox'), null);
+  assert.equal(safeImageSrc('data:text/html,<script>'), null);
+  assert.equal(safeImageSrc('not a url'), null);
+  assert.equal(safeImageSrc(undefined), null);
 });

@@ -1,6 +1,7 @@
 import { api } from '../lib/browser.js';
 import { DEFAULT_SETTINGS, applyTheme, loadSettings, resetSettings, saveSettings } from '../lib/settings.js';
 import { buildFilename } from '../lib/utils.js';
+import { DownloadLog } from '../lib/downloader.js';
 
 const form = document.getElementById('form');
 let settings = await loadSettings();
@@ -68,7 +69,16 @@ document.getElementById('importFile').onchange = async (e) => {
     const data = JSON.parse(await file.text());
     const clean = Object.fromEntries(Object.entries(data).filter(([k, v]) => k in DEFAULT_SETTINGS && typeof v === typeof DEFAULT_SETTINGS[k]));
     settings = await saveSettings(clean);
-    fill(settings);
+    async function showLogSize() {
+  document.getElementById('logSize').textContent = (await DownloadLog.load()).size.toLocaleString();
+}
+document.getElementById('clearLog').onclick = async () => {
+  await DownloadLog.clear();
+  showLogSize();
+};
+
+fill(settings);
+showLogSize();
     document.getElementById('saved').textContent = `Imported ${Object.keys(clean).length} settings`;
   } catch (err) {
     document.getElementById('saved').textContent = `Import failed: ${err.message}`;

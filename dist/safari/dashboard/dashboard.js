@@ -3,19 +3,24 @@ import { applyTheme, loadSettings, saveSettings } from '../lib/settings.js';
 import { callInTab, scanTab, scanTabs } from '../lib/scanner.js';
 import { analyze, convert, copyImageToClipboard, fetchBlob } from '../lib/imaging.js';
 import { ZipWriter } from '../lib/zip.js';
+import { DownloadLog, createGate, waitForDownload } from '../lib/downloader.js';
+import { applyRefererRules } from '../lib/referer.js';
+import { extractUrls, sleep, withRetry } from '../lib/crawl.js';
 import {
   IMAGE_TYPES, applyTemplate, aspectOf, baseNameFromUrl, buildFilename, dedupe, extensionFromUrl,
-  filterImages, formatBytes, hostFromUrl, mapLimit, markVisualDuplicates, normalizeUrl, reverseSearchUrl,
-  sortImages, toCSV, toHTMLGallery, toJSON, toText,
+  filterImages, formatBytes, guessType, hostFromUrl, mapLimit, markVisualDuplicates, normalizeUrl, reverseSearchUrl,
+  safeImageSrc, sortImages, toCSV, toHTMLGallery, toJSON, toText,
 } from '../lib/utils.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const SOURCES = ['img', 'srcset', 'picture', 'lazy', 'css', 'pseudo', 'svg', 'canvas', 'poster', 'link', 'meta', 'icon'];
+const SOURCES = ['img', 'srcset', 'picture', 'lazy', 'css', 'pseudo', 'svg', 'canvas', 'poster', 'link', 'meta', 'icon', 'script', 'sitemap', 'direct', 'generated', 'imported'];
 const SOURCE_LABELS = {
   img: '<img>', srcset: 'srcset', picture: '<picture>', lazy: 'lazy-load', css: 'CSS bg', pseudo: '::before/after',
   svg: 'inline SVG', canvas: 'canvas', poster: 'video poster', link: 'linked', meta: 'meta/og', icon: 'favicon',
+  script: 'in scripts', sitemap: 'sitemap', direct: 'direct URL', generated: 'generated', imported: 'imported',
 };
+const PAGE_SIZE = 400;
 const HISTORY_KEY = 'history';
 const FILTER_STORE = 'dashboard-filters';
 
@@ -34,6 +39,8 @@ const state = {
   historyId: null,
   types: new Set(),
   sources: new Set(),
+  rendered: 0,
+  gate: createGate(),
 };
 
 // ---------------------------------------------------------------- utilities
@@ -124,7 +131,16 @@ function progress(done, total, label) {
 function endTask() {
   $('status').classList.add('hidden');
   state.abort = null;
+  state.gate.resume();
+  $('pauseTask').textContent = 'Pause';
 }
+
+$('pauseTask').onclick = () => {
+  if (state.gate.paused) state.gate.resume();
+  else state.gate.pause();
+  $('pauseTask').textContent = state.gate.paused ? 'Resume' : 'Pause';
+  $('statusText').classList.toggle('paused', state.gate.paused);
+};
 
 $('cancel').onclick = () => {
   state.abort?.abort();
@@ -267,10 +283,10 @@ function buildCard(img, index) {
     // Retry once with the referrer (some CDNs require it), then give up.
     if (el.referrerPolicy === 'no-referrer') {
       el.referrerPolicy = 'strict-origin-when-cross-origin';
-      el.src = img.url;
+      el.src = safeImageSrc(img.url) ?? '';
     } else thumb.classList.add('broken');
   };
-  el.src = img.url;
+  el.src = safeImageSrc(img.url) ?? '';
   thumb.append(el);
 
   const meta = document.createElement('div');
@@ -308,17 +324,20 @@ function buildCard(img, index) {
   return card;
 }
 
-function render() {
+async function render() {
+  // Install Referer rules before any thumbnail request goes out.
+  await ensureReferer();
   const f = readFilters();
   storeSet(FILTER_STORE, f);
   const filtered = filterImages(state.images, { ...f, blocklist: [] });
   state.view = sortImages(filtered, f.sortKey, f.sortDir);
   renderFacets();
 
-  const gallery = $('gallery');
-  const frag = document.createDocumentFragment();
-  state.view.forEach((img, i) => frag.append(buildCard(img, i)));
-  gallery.replaceChildren(frag);
+  // Render in pages so tens of thousands of results stay responsive; more
+  // cards are appended as the user scrolls near the end.
+  $('gallery').replaceChildren();
+  state.rendered = 0;
+  renderMore();
 
   const empty = $('empty');
   if (!state.images.length) {
@@ -332,13 +351,42 @@ function render() {
   updateStats();
 }
 
+function renderMore() {
+  const gallery = $('gallery');
+  const end = Math.min(state.view.length, state.rendered + PAGE_SIZE);
+  const frag = document.createDocumentFragment();
+  for (let i = state.rendered; i < end; i++) frag.append(buildCard(state.view[i], i));
+  gallery.querySelector('.sentinel')?.remove();
+  gallery.append(frag);
+  state.rendered = end;
+  if (end < state.view.length) {
+    const sentinel = document.createElement('div');
+    sentinel.className = 'sentinel';
+    sentinel.textContent = `Showing ${end.toLocaleString()} of ${state.view.length.toLocaleString()}. Scroll for more`;
+    gallery.append(sentinel);
+    sentinelObserver.observe(sentinel);
+  }
+}
+
+const sentinelObserver = new IntersectionObserver((entries) => {
+  if (entries.some((e) => e.isIntersecting)) {
+    sentinelObserver.disconnect();
+    renderMore();
+  }
+}, { root: $('gallery'), rootMargin: '800px' });
+
+// Resolves once Referer rules for the current results are installed.
+function ensureReferer() {
+  return applyRefererRules(state.images, settings.sendReferer).catch(() => 0);
+}
+
 function updateStats() {
   const sel = selected();
   const known = sel.filter((i) => i.bytes != null);
   const bytes = known.reduce((n, i) => n + i.bytes, 0);
-  $('stats').textContent = `${state.view.length} shown of ${state.images.length}`;
+  $('stats').textContent = `${state.view.length.toLocaleString()} shown of ${state.images.length.toLocaleString()}`;
   $('selInfo').textContent = sel.length
-    ? `${sel.length} selected${known.length ? ` · ${formatBytes(bytes)}${known.length < sel.length ? '+' : ''}` : ''}`
+    ? `${sel.length.toLocaleString()} selected${known.length ? ` · ${formatBytes(bytes)}${known.length < sel.length ? '+' : ''}` : ''}`
     : 'Nothing selected: click images to select, Shift+click for a range';
   for (const id of ['download', 'downloadZip', 'copyUrls', 'removeSel']) $(id).disabled = !sel.length;
 }
@@ -440,7 +488,7 @@ async function resolveTargetTab() {
 
 async function scan({ autoScroll = false, usePicked = false, quiet = false } = {}) {
   if (state.mode === 'alltabs') return scanAllTabs();
-  if (state.mode === 'history') return;
+  if (state.mode === 'history' || state.mode === 'import') return;
   if (!state.tab) {
     setSource('No web page to scan');
     render();
@@ -521,6 +569,66 @@ window.addEventListener('pagehide', () => {
   if (state.live && state.tab) callInTab(state.tab.id, 'watch', [false], settings.allFrames).catch(() => {});
 });
 
+// ------------------------------------------------------------------ import
+
+function loadImported(images, title) {
+  state.mode = 'import';
+  state.live = false;
+  state.images = [];
+  mergeImages(images.map((img, i) => ({
+    source: 'imported', width: 0, height: 0, alt: '', pageUrl: '', ...img,
+    id: `imp-${i}-${Math.random().toString(36).slice(2, 7)}`,
+    order: i,
+    type: img.type && img.type !== 'other' ? img.type : guessType(img.url),
+    tabId: null,
+  })));
+  state.historyId = null;
+  setSource(title);
+  render();
+  saveHistory(title, images[0]?.pageUrl || images[0]?.url || '');
+}
+
+async function importFromStorage(key) {
+  const res = await api.storage.local.get(key);
+  const data = res?.[key];
+  await api.storage.local.remove(key).catch(() => {});
+  if (!data?.images?.length) {
+    setSource('Nothing to import');
+    render();
+    return;
+  }
+  loadImported(data.images, data.title || 'Imported images');
+}
+
+$('importBtn').onclick = () => $('importDialog').showModal();
+$('importCancel').onclick = () => $('importDialog').close();
+$('importFile').onchange = async (e) => {
+  const file = e.target.files[0];
+  if (file) $('importText').value += `\n${await file.text()}`;
+  e.target.value = '';
+};
+$('importGo').onclick = () => {
+  const urls = extractUrls($('importText').value);
+  if (!urls.length) return toast('No http(s) URLs found');
+  $('importDialog').close();
+  if ($('importAs').value === 'pages') {
+    const q = new URLSearchParams({ urls: urls.join('\n'), autostart: '1' });
+    api.tabs.create({ url: api.runtime.getURL(`bulk/bulk.html?${q}`) });
+    return;
+  }
+  const add = urls.map((url) => ({ url, source: 'imported' }));
+  if ($('importMode').value === 'append' && state.images.length) {
+    mergeImages([...state.images, ...add.map((a, i) => ({ ...a, id: `imp-${Date.now()}-${i}`, type: guessType(a.url), width: 0, height: 0, alt: '', order: state.images.length + i }))]);
+    render();
+    toast(`Added ${urls.length.toLocaleString()} URLs`);
+  } else loadImported(add, `Imported ${urls.length.toLocaleString()} URLs`);
+  $('importText').value = '';
+};
+$('bulkBtn').onclick = () => {
+  const q = state.tab?.url ? `?crawl=${encodeURIComponent(state.tab.url)}` : '';
+  api.tabs.create({ url: api.runtime.getURL(`bulk/bulk.html${q}`) });
+};
+
 // ----------------------------------------------------------------- history
 
 async function loadHistory() {
@@ -542,7 +650,7 @@ async function saveHistory(title, url) {
     // Inline data URIs can be huge; store only real URLs.
     images: state.images
       .filter((i) => !i.url.startsWith('data:'))
-      .slice(0, 1500)
+      .slice(0, settings.historyImageLimit || Infinity)
       .map(({ url: u, type, width, height, alt, source, sources, pageUrl, bytes }) => ({ url: u, type, width, height, alt, source, sources, pageUrl, bytes })),
   };
   const next = [entry, ...history.filter((h) => h.id !== entry.id)].slice(0, settings.historyLimit);
@@ -558,7 +666,7 @@ async function showHistory() {
     const row = document.createElement('div');
     row.className = 'hist';
     row.innerHTML = '<img alt="" class="checker"><div><b></b><span class="muted small"></span></div>';
-    row.querySelector('img').src = h.thumb || '../icons/icon48.png';
+    row.querySelector('img').src = safeImageSrc(h.thumb) ?? '../icons/icon48.png';
     row.querySelector('b').textContent = h.title;
     row.querySelector('span').textContent = `${h.count} images · ${new Date(h.time).toLocaleString()} · ${hostFromUrl(h.url)}`;
     row.onclick = () => {
@@ -588,6 +696,7 @@ $('clearHistory').onclick = async () => {
 async function analyzeImages(list, label) {
   const todo = list.filter((i) => i.bytes == null);
   if (!todo.length) return 0;
+  await ensureReferer();
   const signal = startTask(label);
   let done = 0;
   let failed = 0;
@@ -625,72 +734,139 @@ function filenameFor(img, index, now, convertTo) {
   });
 }
 
+// Fetches (with retries) and optionally converts one image.
+async function imageBlob(img, convertTo, signal) {
+  let blob = await withRetry(() => fetchBlob(img, signal), settings.retries + 1, 1000, signal);
+  if (convertTo !== 'original') blob = await convert(blob, convertTo, settings.jpegQuality);
+  return blob;
+}
+
+function useFetchPath(img, convertTo) {
+  // Browser-managed downloads can't carry a Referer, so route those through
+  // fetch (which the Referer rules apply to) when the option is on.
+  return convertTo !== 'original' || /^(data|blob):/.test(img.url) || !api.downloads?.download ||
+    Boolean(settings.sendReferer && img.pageUrl);
+}
+
+async function prepareQueue(list) {
+  await ensureReferer();
+  if (!settings.skipDownloaded) return { queue: list, log: await DownloadLog.load(), skipped: 0 };
+  const log = await DownloadLog.load();
+  const queue = list.filter((img) => !log.has(img.url));
+  return { queue, log, skipped: list.length - queue.length };
+}
+
 async function downloadSelected() {
   const list = targetForAction();
   if (!list.length) return;
   const convertTo = $('convertTo').value;
   const now = new Date();
+  const { queue, log, skipped } = await prepareQueue(list);
+  if (!queue.length) return toast(`All ${list.length.toLocaleString()} images were downloaded before (skipped)`);
   const signal = startTask('Downloading');
   let done = 0;
-  let failed = 0;
-  await mapLimit(list, settings.concurrency, async (img, index) => {
+  const failed = [];
+  await mapLimit(queue, settings.concurrency, async (img) => {
+    await state.gate.wait(signal);
+    const index = list.indexOf(img);
     try {
       const filename = filenameFor(img, index, now, convertTo);
-      const needsBlob = convertTo !== 'original' || /^(data|blob):/.test(img.url) || !api.downloads?.download;
-      if (needsBlob) {
-        let blob = await fetchBlob(img, signal);
-        if (convertTo !== 'original') blob = await convert(blob, convertTo, settings.jpegQuality);
-        await saveBlob(blob, filename);
+      if (useFetchPath(img, convertTo)) {
+        await saveBlob(await imageBlob(img, convertTo, signal), filename);
       } else {
-        await saveFile(img.url, filename, settings.saveAs && list.length === 1);
+        await withRetry(async () => {
+          const id = await saveFile(img.url, filename, settings.saveAs && list.length === 1);
+          await waitForDownload(id);
+        }, settings.retries + 1, 1000, signal);
       }
+      log.add(img.url);
     } catch (err) {
       if (err.name === 'AbortError') throw err;
-      failed++;
+      failed.push(img);
     }
-    progress(++done, list.length, 'Downloading');
+    progress(++done, queue.length, 'Downloading');
+    if (done % 50 === 0) log.save();
+    await sleep(settings.requestDelay, signal).catch(() => {});
   }, signal);
+  await log.save();
   endTask();
-  toast(failed ? `Downloaded ${list.length - failed}, ${failed} failed` : `Downloaded ${list.length} images`);
+  for (const img of failed) img.failed = true;
+  const parts = [`Downloaded ${(queue.length - failed.length).toLocaleString()}`];
+  if (skipped) parts.push(`skipped ${skipped.toLocaleString()} already downloaded`);
+  if (failed.length) parts.push(`${failed.length.toLocaleString()} failed after ${settings.retries + 1} attempts`);
+  toast(parts.join(' · '), 5000);
 }
 
+// Builds the ZIP in batches and starts a new part whenever the size limit is
+// reached, so memory use stays bounded and there's no total-size limit.
 async function downloadZip() {
   const list = targetForAction();
   if (!list.length) return;
   const convertTo = $('convertTo').value;
   const now = new Date();
-  const zip = new ZipWriter();
+  const partLimit = Math.min(Math.max(1, settings.zipPartSizeMB || 1024), 3900) * 1024 * 1024;
+  const { queue, log, skipped } = await prepareQueue(list);
+  if (!queue.length) return toast(`All ${list.length.toLocaleString()} images were downloaded before (skipped)`);
   const signal = startTask('Packing ZIP');
-  let done = 0;
+  const first = queue[0];
+  const baseName = applyTemplate(settings.zipName, { ...first, index: 0, date: now, pageUrl: first.pageUrl, title: first.pageTitle });
+  const folder = applyTemplate(settings.folderTemplate.split('/')[0] || '', { ...first, date: now, pageUrl: first.pageUrl });
   const failures = [];
-  const blobs = await mapLimit(list, settings.concurrency + 2, async (img) => {
-    try {
-      let blob = await fetchBlob(img, signal);
-      if (convertTo !== 'original') blob = await convert(blob, convertTo, settings.jpegQuality);
-      return blob;
-    } catch (err) {
-      if (err.name === 'AbortError') throw err;
-      failures.push(img.url);
-      return null;
-    } finally {
-      progress(++done, list.length, 'Fetching for ZIP');
+  let zip = new ZipWriter();
+  let part = 1;
+  let packed = 0;
+  let done = 0;
+  const parts = [];
+
+  const flush = async (last) => {
+    if (!zip.count) return;
+    if (last && failures.length) zip.add('failed-urls.txt', new TextEncoder().encode(failures.join('\n')), now);
+    const single = last && part === 1;
+    const name = `${folder ? `${folder}/` : ''}${baseName}${single ? '' : `_part${String(part).padStart(2, '0')}`}.zip`;
+    await saveBlob(new Blob([zip.finish()], { type: 'application/zip' }), name);
+    parts.push(name);
+    zip = new ZipWriter();
+    part++;
+  };
+
+  const BATCH = Math.max(8, settings.concurrency * 4);
+  for (let start = 0; start < queue.length && !signal.aborted; start += BATCH) {
+    const batch = queue.slice(start, start + BATCH);
+    const blobs = await mapLimit(batch, settings.concurrency + 2, async (img) => {
+      await state.gate.wait(signal);
+      try {
+        const blob = await imageBlob(img, convertTo, signal);
+        await sleep(settings.requestDelay, signal).catch(() => {});
+        return blob;
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        failures.push(img.url);
+        return null;
+      } finally {
+        progress(++done, queue.length, `Packing ZIP part ${part}`);
+      }
+    }, signal);
+    for (let i = 0; i < batch.length; i++) {
+      const blob = blobs[i];
+      if (!(blob instanceof Blob)) continue;
+      if (zip.offset + blob.size > partLimit) await flush(false);
+      const img = batch[i];
+      const name = applyTemplate(settings.filenameTemplate, { ...img, index: list.indexOf(img), date: now, pageUrl: img.pageUrl, title: img.pageTitle });
+      zip.add(`${name}.${extFor(img, convertTo)}`, new Uint8Array(await blob.arrayBuffer()), now);
+      log.add(img.url);
+      packed++;
     }
-  }, signal);
-  if (signal.aborted) return;
-  for (let i = 0; i < list.length; i++) {
-    const blob = blobs[i];
-    if (!(blob instanceof Blob)) continue;
-    const name = applyTemplate(settings.filenameTemplate, { ...list[i], index: i, date: now, pageUrl: list[i].pageUrl, title: list[i].pageTitle });
-    zip.add(`${name}.${extFor(list[i], convertTo)}`, new Uint8Array(await blob.arrayBuffer()), now);
   }
-  if (failures.length) zip.add('failed-urls.txt', new TextEncoder().encode(failures.join('\n')), now);
-  const first = list[0];
-  const zipName = buildFilename(settings.zipName, settings.folderTemplate.split('/')[0] || '', {
-    ...first, index: 0, date: now, ext: 'zip', pageUrl: first.pageUrl, title: first.pageTitle,
-  });
-  await saveBlob(new Blob([zip.finish()], { type: 'application/zip' }), zipName);
+  if (signal.aborted) return;
+  await flush(true);
+  await log.save();
   endTask();
-  toast(`ZIP saved with ${list.length - failures.length} images${failures.length ? ` (${failures.length} failed, listed in failed-urls.txt)` : ''}`);
+  const extra = [
+    parts.length > 1 ? `${parts.length} parts` : '',
+    skipped ? `${skipped.toLocaleString()} skipped (downloaded before)` : '',
+    failures.length ? `${failures.length.toLocaleString()} failed, listed in failed-urls.txt` : '',
+  ].filter(Boolean).join(' · ');
+  toast(`ZIP saved with ${packed.toLocaleString()} images${extra ? ` (${extra})` : ''}`, 5000);
 }
 
 $('download').onclick = downloadSelected;
@@ -755,7 +931,7 @@ function openLightbox(index) {
   if (!img) return;
   state.lightboxIndex = index;
   resetZoom();
-  $('lbImg').src = img.url;
+  $('lbImg').src = safeImageSrc(img.url) ?? '';
   $('lbImg').alt = img.alt || '';
   $('lbTitle').textContent = img.alt || img.title || baseNameFromUrl(img.url);
   const rows = [
@@ -996,6 +1172,8 @@ if (matchMedia('(max-width: 900px)').matches) $('sidebar').classList.add('collap
 if (state.mode === 'history') {
   render();
   showHistory();
+} else if (state.mode === 'import') {
+  await importFromStorage(params.get('key'));
 } else if (state.mode === 'alltabs') {
   scan();
 } else {

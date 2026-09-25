@@ -23,6 +23,8 @@
       <button id="pick" title="Pick an area on the page; only images inside it are scraped">⌖ Pick area</button>
       <button id="live" title="Watch the page and add new images automatically (infinite scroll)">● Live</button>
       <button id="alltabs" title="Scrape every tab in this window">⧉ All tabs</button>
+      <button id="bulkBtn" title="Scrape many URLs or crawl a whole website without opening the pages">🌐 Bulk &amp; crawl</button>
+      <button id="importBtn" title="Paste or load a list of image or page URLs">⤓ Import URLs</button>
       <button id="historyBtn" title="Previous scrapes">🕘 History</button>
       <button id="themeBtn" title="Switch theme">◐</button>
       <button id="optionsBtn" title="Settings">⚙</button>
@@ -139,6 +141,7 @@
       <div id="status" class="status hidden">
         <div class="bar"><div id="progress"></div></div>
         <span id="statusText"></span>
+        <button id="pauseTask">Pause</button>
         <button id="cancel" class="danger">Cancel</button>
       </div>
 
@@ -207,6 +210,33 @@
     </div>
     <div id="historyList"></div>
   </div>
+
+  <dialog id="importDialog" class="import-dialog">
+    <h3>Import URLs</h3>
+    <p class="muted small">Paste image URLs, page URLs, or any text, CSV, HTML or JSON that contains links.</p>
+    <textarea id="importText" rows="10" spellcheck="false" placeholder="https://example.com/photo1.jpg&#10;https://example.com/photo2.png"></textarea>
+    <div class="import-row">
+      <label class="muted small">Or load a file <input id="importFile" type="file" accept=".txt,.csv,.json,.html,.htm,.xml,text/*"></label>
+    </div>
+    <div class="import-row">
+      <label>Treat as
+        <select id="importAs">
+          <option value="images">Image URLs</option>
+          <option value="pages">Pages to scrape (opens the bulk scraper)</option>
+        </select>
+      </label>
+      <label>Current results
+        <select id="importMode">
+          <option value="replace">Replace</option>
+          <option value="append">Add to them</option>
+        </select>
+      </label>
+    </div>
+    <div class="import-row end">
+      <button id="importCancel">Cancel</button>
+      <button id="importGo" class="primary">Import</button>
+    </div>
+  </dialog>
 
   <script type="module" src="dashboard.js"></script>
 </body>

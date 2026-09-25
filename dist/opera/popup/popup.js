@@ -1,7 +1,7 @@
 import { api, isScriptableUrl } from '../lib/browser.js';
 import { applyTheme, loadSettings } from '../lib/settings.js';
 import { scanTab } from '../lib/scanner.js';
-import { filterImages } from '../lib/utils.js';
+import { filterImages, safeImageSrc } from '../lib/utils.js';
 
 const $ = (id) => document.getElementById(id);
 const settings = await loadSettings();
@@ -22,6 +22,10 @@ $('pick').onclick = () => openDashboard({ tabId: tab.id, pick: 1 });
 $('scroll').onclick = () => openDashboard({ tabId: tab.id, autoscroll: 1 });
 $('alltabs').onclick = () => openDashboard({ windowId: tab.windowId, mode: 'alltabs' });
 $('history').onclick = () => openDashboard({ mode: 'history' });
+$('bulk').onclick = () => {
+  const params = /^https?:/.test(tab?.url ?? '') ? { crawl: tab.url } : {};
+  api.runtime.sendMessage({ type: 'open-bulk', params }).then(() => window.close());
+};
 $('quick').onclick = async () => {
   $('quick').disabled = true;
   $('quick').textContent = 'Downloading…';
@@ -47,8 +51,10 @@ if (!isScriptableUrl(tab?.url)) {
     $('frames').textContent = frames;
     const top = [...visible].sort((a, b) => b.width * b.height - a.width * a.height).slice(0, 12);
     for (const img of top) {
+      const src = safeImageSrc(img.url);
+      if (!src) continue;
       const el = document.createElement('img');
-      el.src = img.url;
+      el.src = src;
       el.alt = img.alt;
       el.title = `${img.width || '?'}×${img.height || '?'}`;
       el.className = 'checker';
