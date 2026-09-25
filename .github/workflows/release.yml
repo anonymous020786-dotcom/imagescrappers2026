@@ -24,10 +24,10 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Tag matches manifest version
@@ -46,7 +46,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx --yes web-ext@8 lint --source-dir dist/firefox --warnings-as-errors
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-packages
           path: dist/*.zip
@@ -59,8 +59,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: release-packages
           path: packages
@@ -81,7 +81,7 @@ jobs:
     needs: build
     environment: stores
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-packages
           path: packages
@@ -129,10 +129,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.build.outputs.tag }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Check credentials
@@ -170,7 +170,7 @@ jobs:
     needs: build
     environment: stores
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-packages
           path: packages
