@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Checks & unit tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Static checks (syntax, manifest, locales, references)
+        run: npm run check
+      - name: Unit tests
+        run: npm test
+
+  build:
+    name: Build all browsers
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build
+        run: npm run build
+      - name: Committed dist/ matches a fresh build
+        run: |
+          if ! git diff --quiet -- dist || [ -n "$(git status --porcelain -- dist)" ]; then
+            echo "::error::dist/ is out of date. Run 'npm run build' and commit the result."
+            git status --short -- dist
+            exit 1
+          fi
+      - name: Lint Firefox build (web-ext)
+        run: npx --yes web-ext@8 lint --source-dir dist/firefox --warnings-as-errors
+      - name: Size report
+        run: |
+          {
+            echo "### Package sizes"
+            echo "| Package | Size |"
+            echo "| --- | --- |"
+            for f in dist/*.zip; do echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-packages
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  e2e:
+    name: End-to-end (Chromium)
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright + Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1
+          npx playwright install --with-deps chromium
+      - name: Run end-to-end test
+        run: npm run test:e2e

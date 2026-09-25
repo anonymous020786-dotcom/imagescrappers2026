@@ -179,9 +179,71 @@ get the app notarized instead.
 
 ---
 
+## Part 3: automated releases (CI/CD)
+
+The repo includes GitHub Actions workflows. **CI** checks every pull request.
+**Release** builds and publishes whenever you push a version tag.
+
+### How to release
+```bash
+npm run version:bump patch      # or minor / major / 1.4.0: updates manifest.json and package.json
+npm run build                   # rebuild dist/ (CI fails if it's out of date)
+git commit -am "Release v1.0.1"
+git tag v1.0.1
+git push && git push --tags
+```
+
+The **Release** workflow then:
+1. checks that the tag matches `src/manifest.json`, then reruns the checks, tests, build and Firefox lint
+2. creates a **GitHub Release** with every browser's zip attached
+3. publishes to each store whose secrets are set. Stores without secrets are skipped with a notice, so this works before you have any store accounts.
+
+You can also rerun a release for an existing tag: go to **Actions → Release → Run workflow**.
+
+### Do the first store submission by hand
+The store APIs can only update a listing that already exists. Publish version
+1.0.0 to each store by hand (Part 2) first, then add the secrets below.
+
+### Store secrets
+Add these under **Settings → Secrets and variables → Actions → New repository secret**.
+
+| Store | Secret | Where to get it |
+| --- | --- | --- |
+| Chrome Web Store | `CWS_EXTENSION_ID` | The 32-letter ID shown for your item in the Developer Dashboard |
+| | `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET` | Google Cloud Console: create a project, enable the **Chrome Web Store API**, then create an **OAuth client ID** of type *Desktop app* |
+| | `CWS_REFRESH_TOKEN` | Use the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground/). In its settings, enter your own client ID and secret, authorize the scope `https://www.googleapis.com/auth/chromewebstore`, then exchange the code for tokens and copy the refresh token |
+| Firefox (AMO) | `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` | AMO Developer Hub → **Tools → Manage API Keys** |
+| Edge Add-ons | `EDGE_PRODUCT_ID` | Partner Center → your extension → **Overview** (the Product ID) |
+| | `EDGE_CLIENT_ID`, `EDGE_API_KEY` | Partner Center → **Microsoft Edge → Publish API** → **Create API credentials** |
+
+Optional repository variable: `AMO_CHANNEL`. Set it to `unlisted` to self-distribute
+on Firefox (the default is `listed`). With `unlisted`, the signed `.xpi` is
+attached to the GitHub Release.
+
+Opera and Safari have no publishing API, so upload those by hand. Every release
+includes their zips.
+
+### Require approval before publishing
+All three publish jobs use a GitHub **environment** called `stores`. To require
+someone to approve each store release, go to **Settings → Environments → stores
+→ Required reviewers** and add yourself. You can also store the secrets on that
+environment instead of the whole repository.
+
+### What CI checks on every pull request
+| Check | Catches |
+| --- | --- |
+| `npm run check` | Syntax errors, broken imports, missing files, store listing text that's too long, `package.json` and manifest versions that don't match |
+| Unit tests (Node 20 and 22) | Filters, file-name templates, duplicate detection, exports, ZIP format |
+| Build + `dist/` freshness | Forgetting to run `npm run build` before committing |
+| `web-ext lint` | Problems Firefox Add-ons would reject |
+| End-to-end test (Chromium) | Detection, filters, analysis, ZIP, popup and options breaking in a real browser |
+| CodeQL | Security issues in the JavaScript |
+
+---
+
 ## Release checklist
-- [ ] Raise `version` in `src/manifest.json` (and in `package.json`, for consistency).
-- [ ] Run `npm run build`, then `npm test`, then `npm run test:e2e`.
+- [ ] `npm run version:bump <patch|minor|major>`
+- [ ] `npm run build && npm run check && npm test && npm run test:e2e`
 - [ ] Load `dist/chrome` and `dist/firefox` by hand and scan a real website.
-- [ ] Commit the rebuilt `dist/` and tag the release: `git tag v1.0.1 && git push --tags`.
-- [ ] Upload the new zips to each store.
+- [ ] Commit, then `git tag vX.Y.Z && git push && git push --tags`. The Release workflow does the rest.
+- [ ] Upload the Opera and Safari builds by hand.

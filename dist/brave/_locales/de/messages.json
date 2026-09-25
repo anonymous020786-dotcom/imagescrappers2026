@@ -1,5 +1,11 @@
 {
-  "extName": { "message": "Image Scraper Pro" },
-  "extDescription": { "message": "Alle Bilder einer Seite finden, filtern, ansehen und gesammelt herunterladen: srcset, CSS-Hintergründe, SVG, Canvas, Lazy-Loading, iframes und mehr." },
-  "actionTitle": { "message": "Image Scraper Pro" }
+  "extName": {
+    "message": "Image Scraper Pro"
+  },
+  "extDescription": {
+    "message": "Alle Bilder einer Seite finden, filtern und gesammelt laden: srcset, CSS-Hintergründe, SVG, Canvas, Lazy-Loading und iframes."
+  },
+  "actionTitle": {
+    "message": "Image Scraper Pro"
+  }
 }

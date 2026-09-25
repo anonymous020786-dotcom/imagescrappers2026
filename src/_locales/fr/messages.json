@@ -1,5 +1,11 @@
 {
-  "extName": { "message": "Image Scraper Pro" },
-  "extDescription": { "message": "Trouvez, filtrez, prévisualisez et téléchargez en masse toutes les images d'une page : srcset, arrière-plans CSS, SVG, canvas, chargement différé, iframes et plus." },
-  "actionTitle": { "message": "Image Scraper Pro" }
+  "extName": {
+    "message": "Image Scraper Pro"
+  },
+  "extDescription": {
+    "message": "Trouvez, filtrez et téléchargez en masse les images d'une page : srcset, fonds CSS, SVG, canvas, chargement différé, iframes."
+  },
+  "actionTitle": {
+    "message": "Image Scraper Pro"
+  }
 }

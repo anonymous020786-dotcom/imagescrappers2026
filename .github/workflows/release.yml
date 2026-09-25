@@ -1,0 +1,196 @@
+name: Release
+
+# Push a tag like v1.2.0 (matching src/manifest.json) to build, create a GitHub
+# Release with every browser package, and publish to the stores whose
+# credentials are configured as repository secrets. Stores without secrets are
+# skipped, so the workflow works before any store account exists.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release (e.g. v1.0.0)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & verify
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tag matches manifest version
+        id: version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          VERSION=$(node -p "require('./src/manifest.json').version")
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::Tag $TAG does not match manifest version $VERSION. Run 'npm run version:bump $VERSION' before tagging."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npx --yes web-ext@8 lint --source-dir dist/firefox --warnings-as-errors
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-packages
+          path: dist/*.zip
+          if-no-files-found: error
+
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-packages
+          path: packages
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" packages/*.zip --clobber
+          else
+            gh release create "$TAG" packages/*.zip --title "Image Scraper Pro $TAG" --generate-notes --verify-tag
+          fi
+
+  chrome-web-store:
+    name: Publish · Chrome Web Store
+    runs-on: ubuntu-latest
+    needs: build
+    environment: stores
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-packages
+          path: packages
+      - name: Check credentials
+        id: creds
+        env:
+          ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          if [ -n "$ID" ] && [ -n "$CLIENT_ID" ] && [ -n "$CLIENT_SECRET" ] && [ -n "$REFRESH_TOKEN" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Chrome Web Store secrets not set; skipping."
+          fi
+      - name: Upload and publish
+        if: steps.creds.outputs.ok == 'true'
+        env:
+          ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          ZIP: packages/image-scraper-pro-chrome-${{ needs.build.outputs.version }}.zip
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -fsS https://oauth2.googleapis.com/token \
+            -d client_id="$CLIENT_ID" -d client_secret="$CLIENT_SECRET" \
+            -d refresh_token="$REFRESH_TOKEN" -d grant_type=refresh_token | jq -r .access_token)
+          echo "::add-mask::$TOKEN"
+          UPLOAD=$(curl -sS -X PUT -H "Authorization: Bearer $TOKEN" -H "x-goog-api-version: 2" \
+            -T "$ZIP" "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$ID")
+          echo "$UPLOAD"
+          [ "$(echo "$UPLOAD" | jq -r .uploadState)" != "FAILURE" ] || exit 1
+          PUBLISH=$(curl -sS -X POST -H "Authorization: Bearer $TOKEN" -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" "https://www.googleapis.com/chromewebstore/v1.1/items/$ID/publish")
+          echo "$PUBLISH"
+          echo "$PUBLISH" | jq -e '.status | index("OK") or index("ITEM_PENDING_REVIEW")' >/dev/null
+
+  firefox-addons:
+    name: Publish · Firefox Add-ons (AMO)
+    runs-on: ubuntu-latest
+    needs: [build, github-release]
+    environment: stores
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check credentials
+        id: creds
+        env:
+          ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          if [ -n "$ISSUER" ] && [ -n "$SECRET" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::AMO secrets not set; skipping."
+          fi
+      - name: Build Firefox package
+        if: steps.creds.outputs.ok == 'true'
+        run: npm run build:firefox
+      - name: Submit to AMO
+        if: steps.creds.outputs.ok == 'true'
+        env:
+          ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          CHANNEL: ${{ vars.AMO_CHANNEL || 'listed' }}
+        run: |
+          npx --yes web-ext@8 sign --source-dir dist/firefox --channel "$CHANNEL" \
+            --api-key "$ISSUER" --api-secret "$SECRET" --artifacts-dir signed
+      - name: Attach signed .xpi to the release
+        if: steps.creds.outputs.ok == 'true' && hashFiles('signed/*.xpi') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.build.outputs.tag }}" signed/*.xpi --clobber
+
+  edge-addons:
+    name: Publish · Microsoft Edge Add-ons
+    runs-on: ubuntu-latest
+    needs: build
+    environment: stores
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-packages
+          path: packages
+      - name: Check credentials
+        id: creds
+        env:
+          PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          API_KEY: ${{ secrets.EDGE_API_KEY }}
+        run: |
+          if [ -n "$PRODUCT_ID" ] && [ -n "$CLIENT_ID" ] && [ -n "$API_KEY" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Edge Add-ons secrets not set; skipping."
+          fi
+      - name: Upload and submit
+        if: steps.creds.outputs.ok == 'true'
+        uses: wdzeng/edge-addon@v2
+        with:
+          product-id: ${{ secrets.EDGE_PRODUCT_ID }}
+          zip-path: packages/image-scraper-pro-edge-${{ needs.build.outputs.version }}.zip
+          client-id: ${{ secrets.EDGE_CLIENT_ID }}
+          api-key: ${{ secrets.EDGE_API_KEY }}

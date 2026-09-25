@@ -10,6 +10,9 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ZipWriter } from '../src/lib/zip.js';
 
+// Zip timestamps are stored as local time; pin the zone so output is identical everywhere.
+process.env.TZ = 'UTC';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'src');
 const DIST = join(ROOT, 'dist');
@@ -31,7 +34,12 @@ const TARGETS = {
     // Firefox MV3 uses an event page instead of a service worker.
     m.background = { scripts: ['background/background.js'], type: 'module' };
     m.browser_specific_settings = {
-      gecko: { id: GECKO_ID, strict_min_version: '121.0' },
+      gecko: {
+        id: GECKO_ID,
+        strict_min_version: '121.0',
+        // Declares that no user data leaves the device (required for new AMO listings).
+        data_collection_permissions: { required: ['none'] },
+      },
       gecko_android: { strict_min_version: '121.0' },
     };
     m.options_ui = { page: 'options/options.html', open_in_tab: true };
@@ -48,8 +56,13 @@ const TARGETS = {
   },
 };
 
+// Fixed timestamp for zip entries so builds are byte-for-byte reproducible
+// (CI checks that the committed dist/ matches a fresh build).
+// Override with SOURCE_DATE_EPOCH (seconds) if needed.
+const BUILD_DATE = new Date(Number(process.env.SOURCE_DATE_EPOCH ?? 1767225600) * 1000);
+
 function listFiles(dir) {
-  return readdirSync(dir).flatMap((name) => {
+  return readdirSync(dir).sort().flatMap((name) => {
     const full = join(dir, name);
     return statSync(full).isDirectory() ? listFiles(full) : [full];
   });
@@ -64,7 +77,7 @@ function build(target) {
   writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
   const zip = new ZipWriter();
-  for (const file of listFiles(out)) zip.add(relative(out, file).split('\\').join('/'), readFileSync(file));
+  for (const file of listFiles(out)) zip.add(relative(out, file).split('\\').join('/'), readFileSync(file), BUILD_DATE);
   const zipPath = join(DIST, `image-scraper-pro-${target}-${manifest.version}.zip`);
   writeFileSync(zipPath, zip.finish());
   console.log(`✔ ${target.padEnd(8)} → ${relative(ROOT, out)}  (${relative(ROOT, zipPath)})`);

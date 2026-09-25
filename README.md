@@ -1,5 +1,8 @@
 # Image Scraper Pro
 
+[![CI](https://github.com/anonymous020786-dotcom/imagescrappers2026/actions/workflows/ci.yml/badge.svg)](https://github.com/anonymous020786-dotcom/imagescrappers2026/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/anonymous020786-dotcom/imagescrappers2026/actions/workflows/codeql.yml/badge.svg)](https://github.com/anonymous020786-dotcom/imagescrappers2026/actions/workflows/codeql.yml)
+
 An advanced, dependency-free image scraper extension for every major browser.
 It's built on Manifest V3. Chrome is the primary target, and the same source
 builds for **Microsoft Edge, Brave, Opera, Vivaldi, Firefox (desktop and Android)
@@ -127,9 +130,29 @@ scripts/make-icons.mjs    renders the PNG icons
 tests/                    unit tests (node:test) and a Playwright end-to-end test
 ```
 
+## Continuous integration and delivery
+
+GitHub Actions (in `.github/workflows/`):
+
+- **CI** (`ci.yml`) runs on every push to `main` and every pull request:
+  - static checks (`npm run check`) and unit tests on Node 20 and 22
+  - builds every browser, and fails if the committed `dist/` doesn't match a fresh build
+  - Mozilla's `web-ext lint` on the Firefox build, with warnings treated as errors
+  - the end-to-end test in real Chromium
+  - uploads the store zips as a downloadable artifact, with a size report
+- **Release** (`release.yml`) runs when you push a tag like `v1.2.0`:
+  - checks the tag matches the manifest version, then rebuilds and retests
+  - creates a GitHub Release with every browser's zip attached
+  - publishes to the Chrome Web Store, Firefox Add-ons and Edge Add-ons, skipping any store whose credentials aren't set
+- **CodeQL** (`codeql.yml`) runs a weekly security scan and scans every pull request.
+- **Dependabot** keeps the workflow actions up to date.
+
+See [DEPLOY.md](DEPLOY.md#part-3-automated-releases-cicd) to set up automated releases.
+
 ## Testing
 
 ```bash
+npm run check       # syntax, manifest, locale lengths, missing files, version consistency
 npm test            # unit tests: filters, templates, dedupe, dHash, exports, ZIP (checked with Python's zipfile)
 npm run test:e2e    # loads dist/chrome into real Chromium and exercises the dashboard (needs Playwright)
 ```
