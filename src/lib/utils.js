@@ -403,3 +403,18 @@ export const REVERSE_SEARCH_ENGINES = {
 export function reverseSearchUrl(engine, url) {
   return (REVERSE_SEARCH_ENGINES[engine] ?? REVERSE_SEARCH_ENGINES.google)(url);
 }
+
+const SAFE_SRC_PROTOCOLS = new Set(['http:', 'https:', 'blob:', 'file:']);
+
+// Returns the URL only if it is safe to put in an <img src>: http(s), blob,
+// file, or a data:image URI. Anything else (javascript:, vbscript:, …) → null.
+export function safeImageSrc(url) {
+  if (typeof url !== 'string') return null;
+  const t = url.trim();
+  if (/^data:image\//i.test(t)) return t;
+  try {
+    return SAFE_SRC_PROTOCOLS.has(new URL(t).protocol) ? t : null;
+  } catch {
+    return null;
+  }
+}

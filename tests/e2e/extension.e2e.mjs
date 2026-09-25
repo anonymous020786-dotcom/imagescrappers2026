@@ -6,7 +6,7 @@
 // Requires Playwright (npm i -D playwright, or a global install).
 import http from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -60,8 +60,11 @@ const server = http.createServer((req, res) => {
     return res.end(/small|favicon/.test(path) ? ICON_SMALL : ICON);
   }
   const file = path === '/' ? 'page.html' : path.slice(1);
+  // Never serve anything outside the fixtures folder.
+  const full = resolve(FIXTURES, decodeURIComponent(file));
+  if (!full.startsWith(FIXTURES + sep)) return res.writeHead(403).end();
   try {
-    let body = readFileSync(join(FIXTURES, file));
+    let body = readFileSync(full);
     if (file.endsWith('gallery.html')) body = Buffer.from(body.toString().replace('HOST', `127.0.0.1:${server.address().port}`));
     res.writeHead(200, { 'content-type': 'text/html' });
     res.end(body);

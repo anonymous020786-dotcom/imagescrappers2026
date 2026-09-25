@@ -40,10 +40,12 @@ export function extractFromDocument(doc, pageUrl) {
   const abs = (u) => {
     if (!u) return null;
     const t = u.trim();
-    if (!t || t.startsWith('javascript:') || t === 'about:blank') return null;
-    if (t.startsWith('data:')) return t.startsWith('data:image/') ? t : null;
+    if (!t) return null;
+    if (/^data:/i.test(t)) return /^data:image\//i.test(t) ? t : null;
     try {
-      return new URL(t, baseUrl).href;
+      // Allowlist: only web URLs (drops javascript:, vbscript:, about:, …).
+      const u = new URL(t, baseUrl);
+      return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
     } catch {
       return null;
     }

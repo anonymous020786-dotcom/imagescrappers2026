@@ -9,7 +9,7 @@ import { extractUrls, sleep, withRetry } from '../lib/crawl.js';
 import {
   IMAGE_TYPES, applyTemplate, aspectOf, baseNameFromUrl, buildFilename, dedupe, extensionFromUrl,
   filterImages, formatBytes, guessType, hostFromUrl, mapLimit, markVisualDuplicates, normalizeUrl, reverseSearchUrl,
-  sortImages, toCSV, toHTMLGallery, toJSON, toText,
+  safeImageSrc, sortImages, toCSV, toHTMLGallery, toJSON, toText,
 } from '../lib/utils.js';
 
 const $ = (id) => document.getElementById(id);
@@ -283,10 +283,10 @@ function buildCard(img, index) {
     // Retry once with the referrer (some CDNs require it), then give up.
     if (el.referrerPolicy === 'no-referrer') {
       el.referrerPolicy = 'strict-origin-when-cross-origin';
-      el.src = img.url;
+      el.src = safeImageSrc(img.url) ?? '';
     } else thumb.classList.add('broken');
   };
-  el.src = img.url;
+  el.src = safeImageSrc(img.url) ?? '';
   thumb.append(el);
 
   const meta = document.createElement('div');
@@ -666,7 +666,7 @@ async function showHistory() {
     const row = document.createElement('div');
     row.className = 'hist';
     row.innerHTML = '<img alt="" class="checker"><div><b></b><span class="muted small"></span></div>';
-    row.querySelector('img').src = h.thumb || '../icons/icon48.png';
+    row.querySelector('img').src = safeImageSrc(h.thumb) ?? '../icons/icon48.png';
     row.querySelector('b').textContent = h.title;
     row.querySelector('span').textContent = `${h.count} images · ${new Date(h.time).toLocaleString()} · ${hostFromUrl(h.url)}`;
     row.onclick = () => {
@@ -931,7 +931,7 @@ function openLightbox(index) {
   if (!img) return;
   state.lightboxIndex = index;
   resetZoom();
-  $('lbImg').src = img.url;
+  $('lbImg').src = safeImageSrc(img.url) ?? '';
   $('lbImg').alt = img.alt || '';
   $('lbTitle').textContent = img.alt || img.title || baseNameFromUrl(img.url);
   const rows = [

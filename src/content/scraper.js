@@ -24,9 +24,11 @@
   function absolute(url) {
     if (!url) return null;
     const trimmed = String(url).trim();
-    if (!trimmed || trimmed === 'none' || trimmed.startsWith('javascript:') || trimmed === 'about:blank') return null;
+    if (!trimmed || trimmed === 'none') return null;
     try {
-      return new URL(trimmed, document.baseURI).href;
+      // Allowlist schemes that can hold an image (drops javascript:, vbscript:, about:, …).
+      const u = new URL(trimmed, document.baseURI);
+      return /^(https?|file|ftp|blob):$/.test(u.protocol) ? u.href : null;
     } catch {
       return null;
     }

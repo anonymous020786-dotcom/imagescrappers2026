@@ -3,7 +3,7 @@ import { applyTheme, loadSettings } from '../lib/settings.js';
 import { Crawler } from '../lib/crawler.js';
 import { extractUrls } from '../lib/crawl.js';
 import { expandPattern } from '../lib/urlgen.js';
-import { guessType, toText } from '../lib/utils.js';
+import { guessType, safeImageSrc, toText } from '../lib/utils.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -107,8 +107,10 @@ function renderStats(s) {
 function addThumbs(images) {
   const box = $('thumbs');
   for (const img of images.filter((i) => !i.url.startsWith('data:')).slice(-40)) {
+    const src = safeImageSrc(img.url);
+    if (!src) continue;
     const el = document.createElement('img');
-    el.src = img.url;
+    el.src = src;
     el.loading = 'lazy';
     el.alt = img.alt || '';
     el.title = img.url;
@@ -150,7 +152,11 @@ async function start() {
       useSitemap: $('useSitemap').checked,
     });
   } else {
-    const { urls, truncated } = expandPattern($('pattern').value, MAX_GENERATED);
+    const expanded = expandPattern($('pattern').value, MAX_GENERATED);
+    const truncated = expanded.truncated;
+    // Only web URLs can be scraped or downloaded.
+    const urls = expanded.urls.filter((u) => /^https?:\/\//i.test(u));
+    if (urls.length < expanded.urls.length) log(`Ignored ${expanded.urls.length - urls.length} URLs that are not http(s)`, 'warn');
     if (truncated) log(`Pattern truncated to ${MAX_GENERATED.toLocaleString()} URLs`, 'warn');
     if ($('patternAs').value === 'images') {
       results = urls.map((url, i) => ({ url, source: 'generated', sources: ['generated'], type: guessType(url), order: i, width: 0, height: 0, alt: '', pageUrl: '' }));

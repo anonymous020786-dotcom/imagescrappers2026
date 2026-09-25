@@ -156,3 +156,16 @@ test('mapLimit respects concurrency and captures errors', async () => {
   assert.equal(res[0], 2);
   assert.equal(res[2].error.message, 'boom');
 });
+
+test('safeImageSrc only allows image-safe schemes', async () => {
+  const { safeImageSrc } = await import('../src/lib/utils.js');
+  assert.equal(safeImageSrc('https://x.com/a.png'), 'https://x.com/a.png');
+  assert.equal(safeImageSrc('data:image/png;base64,AA'), 'data:image/png;base64,AA');
+  assert.equal(safeImageSrc('blob:https://x.com/1'), 'blob:https://x.com/1');
+  assert.equal(safeImageSrc('javascript:alert(1)'), null);
+  assert.equal(safeImageSrc(' JavaScript:alert(1)'), null);
+  assert.equal(safeImageSrc('vbscript:msgbox'), null);
+  assert.equal(safeImageSrc('data:text/html,<script>'), null);
+  assert.equal(safeImageSrc('not a url'), null);
+  assert.equal(safeImageSrc(undefined), null);
+});
