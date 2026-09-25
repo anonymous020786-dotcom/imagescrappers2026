@@ -1,6 +1,7 @@
 import { api, isFirefox, isScriptableUrl } from '../lib/browser.js';
 import { loadSettings } from '../lib/settings.js';
 import { scanTab } from '../lib/scanner.js';
+import { refreshAccess } from '../lib/access.js';
 import { buildFilename, extensionFromUrl, filterImages, guessType, reverseSearchUrl } from '../lib/utils.js';
 
 const DASHBOARD = 'dashboard/dashboard.html';
@@ -92,7 +93,8 @@ function notifyBadge(tabId, text, color) {
 
 async function updateBadge(tabId, url) {
   const settings = await loadSettings();
-  if (!settings.showBadge || !isScriptableUrl(url)) {
+  // Counting images on every page load needs access to all sites; without it the badge stays empty.
+  if (!settings.showBadge || !isScriptableUrl(url) || !(await refreshAccess())) {
     api.action.setBadgeText({ tabId, text: '' }).catch(() => {});
     return;
   }

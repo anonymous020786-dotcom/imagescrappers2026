@@ -209,7 +209,7 @@ Add these under **Settings → Secrets and variables → Actions → New reposit
 | Store | Secret | Where to get it |
 | --- | --- | --- |
 | Chrome Web Store | `CWS_EXTENSION_ID` | The 32-letter ID shown for your item in the Developer Dashboard |
-| | `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET` | Google Cloud Console: create a project, enable the **Chrome Web Store API**, then create an **OAuth client ID** of type *Desktop app* |
+| | `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET` | Google Cloud Console: create a project, enable the **Chrome Web Store API**, then create an **OAuth client ID** of type **Web application** with the authorized redirect URI `https://developers.google.com/oauthplayground` (the Playground below needs it). Set the OAuth consent screen to **In production**: in *Testing*, refresh tokens expire after 7 days |
 | | `CWS_REFRESH_TOKEN` | Use the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground/). In its settings, enter your own client ID and secret, authorize the scope `https://www.googleapis.com/auth/chromewebstore`, then exchange the code for tokens and copy the refresh token |
 | Firefox (AMO) | `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` | AMO Developer Hub → **Tools → Manage API Keys** |
 | Edge Add-ons | `EDGE_PRODUCT_ID` | Partner Center → your extension → **Overview** (the Product ID) |

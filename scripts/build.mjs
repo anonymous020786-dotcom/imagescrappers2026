@@ -22,6 +22,17 @@ const base = JSON.parse(readFileSync(join(SRC, 'manifest.json'), 'utf8'));
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
+// Chromium builds ask for access to all sites at runtime (optional_host_permissions); other browsers declare it.
+function requiredHostAccess(m) {
+  const { optional_host_permissions: hosts, ...rest } = m;
+  const out = {};
+  for (const [key, value] of Object.entries(rest)) {
+    out[key] = value;
+    if (key === 'permissions' && hosts) out.host_permissions = hosts;
+  }
+  return out;
+}
+
 const TARGETS = {
   // Chromium family shares the same MV3 manifest.
   chrome: (m) => m,
@@ -31,6 +42,9 @@ const TARGETS = {
   vivaldi: (m) => m,
 
   firefox: (m) => {
+    // Firefox lets users grant or withhold site access themselves (and optional_host_permissions needs
+    // Firefox 128+), so keep <all_urls> as a regular host permission there.
+    m = requiredHostAccess(m);
     // Firefox MV3 uses an event page instead of a service worker.
     m.background = { scripts: ['background/background.js'], type: 'module' };
     m.browser_specific_settings = {
@@ -47,6 +61,7 @@ const TARGETS = {
   },
 
   safari: (m) => {
+    m = requiredHostAccess(m);
     // Safari Web Extensions (via xcrun safari-web-extension-converter).
     // Safari has no downloads API; the dashboard falls back to <a download>.
     m.permissions = m.permissions.filter((p) => p !== 'downloads');

@@ -5,6 +5,7 @@ import { analyze, convert, copyImageToClipboard, fetchBlob } from '../lib/imagin
 import { ZipWriter } from '../lib/zip.js';
 import { DownloadLog, createGate, waitForDownload } from '../lib/downloader.js';
 import { applyRefererRules } from '../lib/referer.js';
+import { NEEDS_ACCESS, access, explainScanError, mountAccessBanner, onAccessChange, refreshAccess, requestAllSites } from '../lib/access.js';
 import { extractUrls, sleep, withRetry } from '../lib/crawl.js';
 import {
   IMAGE_TYPES, applyTemplate, aspectOf, baseNameFromUrl, buildFilename, dedupe, extensionFromUrl,
@@ -26,6 +27,7 @@ const FILTER_STORE = 'dashboard-filters';
 
 let settings = await loadSettings();
 applyTheme(settings.theme);
+await refreshAccess();
 
 const state = {
   mode: params.get('mode') || 'tab',
@@ -377,7 +379,16 @@ const sentinelObserver = new IntersectionObserver((entries) => {
 
 // Resolves once Referer rules for the current results are installed.
 function ensureReferer() {
+  // Referer rules modify requests to other hosts, which needs access to all sites.
+  if (!access.granted) return Promise.resolve(0);
   return applyRefererRules(state.images, settings.sendReferer).catch(() => 0);
+}
+
+// Call first in a click handler: asks for access to all sites if needed (the prompt needs the click).
+async function needAllSites() {
+  if (await requestAllSites()) return true;
+  toast(NEEDS_ACCESS, 7000);
+  return false;
 }
 
 function updateStats() {
@@ -505,8 +516,9 @@ async function scan({ autoScroll = false, usePicked = false, quiet = false } = {
     if (quiet && added) toast(`${added} new image${added === 1 ? '' : 's'} found`);
     await saveHistory(res.title, res.url);
   } catch (err) {
-    setSource(err.message);
-    toast(err.message, 5000);
+    const msg = explainScanError(err);
+    setSource(msg);
+    toast(msg, 6000);
     render();
   } finally {
     if (!quiet) endTask();
@@ -522,13 +534,15 @@ async function scanAllTabs() {
   if (signal.aborted) return;
   mergeImages(images);
   setSource(`${tabs.length} tabs · ${errors.length ? `${errors.length} could not be scanned` : 'all scanned'}`);
+  if (errors.length && !access.granted) toast('Scanning other tabs needs access to all sites. Use "Allow access to all sites" above, then scan again.', 7000);
   render();
   await saveHistory(`${tabs.length} tabs`, tabs[0]?.url ?? '');
 }
 
 $('rescan').onclick = () => scan();
 $('autoscroll').onclick = () => scan({ autoScroll: true });
-$('alltabs').onclick = () => {
+$('alltabs').onclick = async () => {
+  if (!(await needAllSites())) return;
   state.mode = 'alltabs';
   state.images = [];
   scan();
@@ -714,12 +728,14 @@ async function analyzeImages(list, label) {
 }
 
 $('analyze').onclick = async () => {
+  if (!(await needAllSites())) return;
   const failed = await analyzeImages(state.view, 'Analyzing');
   render();
   toast(failed ? `Analyzed. ${failed} images could not be fetched.` : 'Analysis complete: exact sizes, types and colours added');
 };
 
 $('dupes').onclick = async () => {
+  if (!(await needAllSites())) return;
   await analyzeImages(state.images, 'Fingerprinting');
   const n = markVisualDuplicates(state.images, settings.duplicateThreshold);
   render();
@@ -745,7 +761,7 @@ function useFetchPath(img, convertTo) {
   // Browser-managed downloads can't carry a Referer, so route those through
   // fetch (which the Referer rules apply to) when the option is on.
   return convertTo !== 'original' || /^(data|blob):/.test(img.url) || !api.downloads?.download ||
-    Boolean(settings.sendReferer && img.pageUrl);
+    Boolean(settings.sendReferer && img.pageUrl && access.granted);
 }
 
 async function prepareQueue(list) {
@@ -869,8 +885,15 @@ async function downloadZip() {
   toast(`ZIP saved with ${packed.toLocaleString()} images${extra ? ` (${extra})` : ''}`, 5000);
 }
 
-$('download').onclick = downloadSelected;
-$('downloadZip').onclick = downloadZip;
+$('download').onclick = async () => {
+  // Plain downloads are handled by the browser; only converting needs to fetch the images first.
+  if ($('convertTo').value !== 'original' && !(await needAllSites())) return;
+  await downloadSelected();
+};
+$('downloadZip').onclick = async () => {
+  if (!(await needAllSites())) return;
+  await downloadZip();
+};
 
 $('copyUrls').onclick = async () => {
   const list = targetForAction();
@@ -1015,6 +1038,7 @@ $('lbSelect').onclick = () => {
   $('lbSelect').textContent = lbImage()?.selected ? 'Deselect' : 'Select';
 };
 $('lbDownload').onclick = async () => {
+  if ($('convertTo').value !== 'original' && !(await needAllSites())) return;
   const img = lbImage();
   const filename = filenameFor(img, state.lightboxIndex, new Date(), $('convertTo').value);
   try {
@@ -1029,6 +1053,7 @@ $('lbDownload').onclick = async () => {
   }
 };
 $('lbCopyImg').onclick = async () => {
+  if (!(await needAllSites())) return;
   try {
     await copyImageToClipboard(await fetchBlob(lbImage()));
     toast('Image copied to clipboard');
@@ -1165,6 +1190,14 @@ document.addEventListener('keydown', (e) => {
 // ------------------------------------------------------------------- boot
 
 applyView();
+mountAccessBanner(
+  document.querySelector('main'),
+  'Limited mode: scanning and downloading work on the page you opened this from. Analyze, ZIP, convert, duplicates, copy image and all-tabs scans need access to all sites.',
+);
+// "All tabs" opened before access was granted: scan again as soon as it is.
+onAccessChange((granted) => {
+  if (granted && state.mode === 'alltabs') scan();
+});
 writeFilters({ ...defaultFilters(), ...(storeGet(FILTER_STORE) ?? {}) });
 $('convertTo').value = settings.convertTo;
 if (matchMedia('(max-width: 900px)').matches) $('sidebar').classList.add('collapsed');

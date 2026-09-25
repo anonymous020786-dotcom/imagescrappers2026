@@ -7,7 +7,7 @@ Upload `dist/image-scraper-pro-chrome-<version>.zip` (built with `npm run build:
 
 ## 1. Package
 
-- **File:** `dist/image-scraper-pro-chrome-1.1.0.zip` (manifest at the zip root, Manifest V3)
+- **File:** `dist/image-scraper-pro-chrome-<version>.zip` (manifest at the zip root, Manifest V3). Version 1.1.0 was the first submission.
 - The name, summary and icon come from the package: **Image Scraper Pro**. The summary is the manifest
   description, localized in English, German, Spanish and French.
 
@@ -107,7 +107,7 @@ Find the images on web pages the user chooses and let the user filter, preview a
 | `tabs` | Reads the URL and title of tabs so images can be named after the page, all tabs in a window can be scanned at once, and the toolbar badge shows each page's image count. |
 | `clipboardWrite` | Copies selected image URLs, or an image itself, to the clipboard when the user clicks Copy. |
 | `declarativeNetRequestWithHostAccess` | Some image hosts refuse requests that don't come from their own site. For the extension's own image requests only, a session rule sends the address of the page the image was found on as the Referer, so the image the user sees on that page can be previewed and downloaded. |
-| Host permission `<all_urls>` | The user can scan images on any website, and the extension must fetch those images (often from a different CDN domain) to measure, convert, de-duplicate and ZIP them. The bulk scraper and crawler also fetch pages the user lists. Nothing is fetched unless the user starts a scan. |
+| Host permission `<all_urls>` (optional since 1.2.0) | Requested at runtime, only when the user first uses a feature that needs it; until then the extension works through activeTab on the tab the user invokes it on. The user can scan images on any website, and those features must fetch the images (often from a different CDN domain) to measure, convert, de-duplicate and ZIP them. The bulk scraper and crawler also fetch pages the user lists. Nothing is fetched unless the user starts it. |
 
 **Are you using remote code?** No. All JavaScript is included in the package.
 

@@ -1,6 +1,6 @@
 # Privacy Policy: Image Scraper Pro
 
-_Last updated: 25 September 2026_
+_Last updated: 25 September 2026 (version 1.2.0: access to all sites became optional)_
 
 Image Scraper Pro is a browser extension that finds and downloads images from web pages you choose. It is built to
 work entirely inside your browser.
@@ -40,10 +40,14 @@ The extension only contacts websites **you** ask it to:
 ## Permissions
 
 Each browser permission is used only for the extension's single purpose, finding and downloading images:
-reading pages you scan (`activeTab`, `scripting`, host access), saving files (`downloads`), right-click menu items
+reading pages you scan (`activeTab`, `scripting`), saving files (`downloads`), right-click menu items
 (`contextMenus`), storing settings and history (`storage`, `unlimitedStorage`), scanning several tabs and naming
 files after the page (`tabs`), copying image URLs (`clipboardWrite`), and loading hotlink-protected images
 (`declarativeNetRequestWithHostAccess`).
+
+In Chrome and other Chromium browsers, access to all sites is **optional**. The extension asks for it only when you
+first use a feature that fetches images or pages from other sites (analyze, ZIP, convert, duplicates, copy image,
+all tabs, bulk scraping and crawling). You can allow or remove it at any time on the options page.
 
 ## Children
 
