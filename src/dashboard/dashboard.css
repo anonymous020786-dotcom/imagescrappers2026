@@ -128,3 +128,13 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .lightbox { grid-template-columns: 40px 1fr 40px; grid-template-rows: 1fr auto; }
   .lb-info { grid-column: 1 / -1; max-height: 40vh; }
 }
+
+.sentinel { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 18px; }
+#statusText.paused::after { content: ' · paused'; color: var(--danger); }
+.import-dialog { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); width: min(640px, calc(100vw - 32px)); padding: 18px; box-shadow: var(--shadow); }
+.import-dialog::backdrop { background: rgba(0, 0, 0, .45); }
+.import-dialog h3 { margin: 0 0 4px; }
+.import-dialog textarea { width: 100%; font: 12px/1.45 ui-monospace, monospace; resize: vertical; }
+.import-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.import-row label { display: flex; gap: 6px; align-items: center; }
+.import-row.end { justify-content: flex-end; }

@@ -10,6 +10,11 @@ function openDashboard(params) {
   return api.tabs.create({ url: api.runtime.getURL(`${DASHBOARD}?${qs}`) });
 }
 
+function openBulk(params) {
+  const qs = new URLSearchParams(params).toString();
+  return api.tabs.create({ url: api.runtime.getURL(`bulk/bulk.html?${qs}`) });
+}
+
 async function createMenus() {
   await api.contextMenus.removeAll();
   const menus = [
@@ -19,6 +24,8 @@ async function createMenus() {
     { id: 'reverse-search', title: 'Reverse image search', contexts: ['image'] },
     { id: 'copy-image-url', title: 'Copy image URL', contexts: ['image'] },
     { id: 'download-all', title: 'Download all images on this page', contexts: ['page', 'frame'] },
+    { id: 'crawl-site', title: 'Crawl this website for images…', contexts: ['page', 'frame'] },
+    { id: 'scrape-link', title: 'Scrape images from linked page', contexts: ['link'] },
     { id: 'scrape-all-tabs', title: 'Scrape images from all tabs in this window', contexts: ['page', 'frame'] },
   ];
   for (const m of menus) api.contextMenus.create(m);
@@ -140,6 +147,12 @@ api.contextMenus.onClicked.addListener(async (info, tab) => {
     case 'scrape-all-tabs':
       openDashboard({ windowId: tab.windowId, mode: 'alltabs' });
       break;
+    case 'crawl-site':
+      openBulk({ crawl: tab.url });
+      break;
+    case 'scrape-link':
+      openBulk({ urls: info.linkUrl, autostart: 1 });
+      break;
   }
 });
 
@@ -154,6 +167,10 @@ api.commands.onCommand.addListener(async (command) => {
 api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === 'quick-download') {
     api.tabs.get(msg.tabId).then(quickDownloadAll).then(sendResponse, (e) => sendResponse({ error: e.message }));
+    return true;
+  }
+  if (msg?.type === 'open-bulk') {
+    openBulk(msg.params ?? {}).then(() => sendResponse({ ok: true }));
     return true;
   }
   if (msg?.type === 'open-dashboard') {

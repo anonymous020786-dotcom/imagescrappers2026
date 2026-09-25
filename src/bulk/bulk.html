@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bulk Scraper</title>
+  <link rel="icon" href="../icons/icon32.png">
+  <link rel="stylesheet" href="../lib/theme.css">
+  <link rel="stylesheet" href="bulk.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="../icons/icon48.png" alt="" width="36" height="36">
+      <div>
+        <h1>Bulk scraper &amp; crawler</h1>
+        <p class="muted">Scrape images from any number of URLs or whole websites without opening them.</p>
+      </div>
+      <button id="openDashboard" disabled>Open results in dashboard</button>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="urls" class="active">URL list</button>
+      <button role="tab" data-tab="crawl">Crawl a website</button>
+      <button role="tab" data-tab="generate">Generate URLs</button>
+    </nav>
+
+    <section id="tab-urls" class="panel">
+      <label class="block">Page or image URLs: one per line, or paste any text containing links
+        <textarea id="urlList" rows="8" spellcheck="false" placeholder="https://example.com/gallery&#10;https://example.org/photos/page-2&#10;https://cdn.example.net/image.jpg"></textarea>
+      </label>
+      <div class="row">
+        <label class="file">Load from file (.txt, .csv, .html, .json)
+          <input id="urlFile" type="file" accept=".txt,.csv,.html,.htm,.json,.xml,text/*">
+        </label>
+        <span id="urlCount" class="muted"></span>
+      </div>
+    </section>
+
+    <section id="tab-crawl" class="panel hidden">
+      <label class="block">Start URL(s)
+        <textarea id="crawlStart" rows="3" spellcheck="false" placeholder="https://example.com/"></textarea>
+      </label>
+      <div class="grid">
+        <label>Stay within
+          <select id="scope">
+            <option value="host">Same website (host)</option>
+            <option value="domain">Same domain + subdomains</option>
+            <option value="any">Any website (follow external links)</option>
+          </select>
+        </label>
+        <label>Link depth <input id="maxDepth" type="number" min="0" max="100" value="3"></label>
+        <label>Only follow URLs matching <input id="include" type="text" placeholder="*/gallery/*, /photo/\d+/"></label>
+        <label>Never follow URLs matching <input id="exclude" type="text" placeholder="*login*, *logout*, *?sort=*"></label>
+      </div>
+      <label class="row"><input id="useSitemap" type="checkbox"> Also read sitemap.xml (finds pages that no link points to)</label>
+    </section>
+
+    <section id="tab-generate" class="panel hidden">
+      <label class="block">URL pattern
+        <input id="pattern" type="text" spellcheck="false" placeholder="https://example.com/photos/img_[001-250].{jpg,png}">
+      </label>
+      <p class="muted small">
+        <code>[1-100]</code> numbers · <code>[001-100]</code> zero-padded · <code>[0-500:10]</code> step ·
+        <code>[a-z]</code> letters · <code>{jpg,png,webp}</code> alternatives. Tokens combine.
+      </p>
+      <p id="patternInfo" class="small"></p>
+      <pre id="patternPreview" class="preview"></pre>
+      <div class="row">
+        <label>Treat generated URLs as
+          <select id="patternAs">
+            <option value="images">Direct image URLs</option>
+            <option value="pages">Pages to scrape</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <fieldset class="options">
+      <legend>Options</legend>
+      <div class="grid">
+        <label>Scraping mode
+          <select id="mode">
+            <option value="fast">Fast: read the HTML (no JavaScript)</option>
+            <option value="render">Full render: open in a background tab</option>
+          </select>
+        </label>
+        <label>Pages at once <input id="concurrency" type="number" min="1" max="32" value="4"></label>
+        <label>Delay between requests (ms) <input id="delay" type="number" min="0" max="60000" step="50" value="250"></label>
+        <label>Maximum pages (0 = unlimited) <input id="maxPages" type="number" min="0" value="0"></label>
+        <label>Page timeout (s) <input id="timeout" type="number" min="5" max="300" value="30"></label>
+      </div>
+      <div class="checks">
+        <label><input id="respectRobots" type="checkbox" checked> Respect robots.txt</label>
+        <label><input id="followNext" type="checkbox" checked> Follow "next page" pagination</label>
+        <label class="render-only"><input id="autoScroll" type="checkbox"> Auto-scroll each page (lazy/infinite scroll)</label>
+      </div>
+      <p class="muted small render-only">Full render runs each site's JavaScript, so it finds images added by scripts. It's slower: keep "Pages at once" low (2–4).</p>
+    </fieldset>
+
+    <div class="controls">
+      <button id="start" class="primary">Start scraping</button>
+      <button id="pause" disabled>Pause</button>
+      <button id="stop" class="danger" disabled>Stop</button>
+      <span class="spacer"></span>
+      <button id="exportTxt" disabled>Export URLs</button>
+    </div>
+
+    <section class="stats">
+      <div><b id="sPages">0</b><span>pages done</span></div>
+      <div><b id="sQueue">0</b><span>in queue</span></div>
+      <div><b id="sImages">0</b><span>images found</span></div>
+      <div><b id="sFailed">0</b><span>failed</span></div>
+      <div><b id="sSkipped">0</b><span>skipped</span></div>
+      <div><b id="sRate">–</b><span>pages/min</span></div>
+    </section>
+    <div class="bar"><div id="progress"></div></div>
+
+    <div id="thumbs" class="thumbs"></div>
+    <details open>
+      <summary>Activity log</summary>
+      <ol id="log" class="log"></ol>
+    </details>
+  </main>
+  <script type="module" src="bulk.js"></script>
+</body>
+</html>

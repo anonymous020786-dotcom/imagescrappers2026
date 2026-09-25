@@ -18,7 +18,7 @@ de-duplicate, convert and bulk-download them, individually or as one ZIP file.
 Pre-built packages are committed in [`dist/`](dist). You don't need to build anything:
 
 - **Unpacked folders** to load directly: `dist/chrome`, `dist/edge`, `dist/brave`, `dist/opera`, `dist/vivaldi`, `dist/firefox`, `dist/safari`
-- **Store-ready zips**: `dist/image-scraper-pro-<browser>-1.0.0.zip`
+- **Store-ready zips**: `dist/image-scraper-pro-<browser>-1.1.0.zip`
 
 See **[DEPLOY.md](DEPLOY.md)** for step-by-step install instructions for every browser and how to publish to each store.
 
@@ -39,7 +39,7 @@ npm run build:chrome   # or a single target: chrome | edge | brave | opera | viv
 
 Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 
-## Features (52)
+## Features (80+)
 
 ### Detection: finding every image
 1. `<img>` elements, including their natural (intrinsic) dimensions
@@ -103,6 +103,42 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 51. Export the list as **TXT, CSV, JSON or a standalone HTML gallery**
 52. Copy the selected URLs to the clipboard
 
+### Bulk scraping and website crawling (any URL, no tab needed)
+53. **Bulk URL scraper**: paste thousands of page or image URLs, or load them from a `.txt`, `.csv`, `.html` or `.json` file
+54. **Website crawler**: follows links from start URLs with a link-depth limit and **no page limit** (0 = unlimited)
+55. Crawl scope: the same website, the same domain including subdomains, or any website
+56. Include and exclude URL patterns (wildcards or `/regex/`) to control which links the crawler follows
+57. **Automatic pagination**: follows `rel="next"` and "Next", "›", "»", "Siguiente", "Suivant", "Weiter", "次へ", "下一页" and "Далее" links
+58. **sitemap.xml support**, including sitemap indexes, gzipped sitemaps and Google image sitemaps
+59. **Respects robots.txt** (Allow/Disallow, wildcards and Crawl-delay), and can be switched off for your own sites
+60. **Fast mode** reads the page HTML directly, handling hundreds of pages per minute
+61. **Full-render mode** opens each page in a background tab so its JavaScript runs, optionally auto-scrolling each page
+62. Finds image URLs inside inline scripts and JSON (for JavaScript-built galleries)
+63. Adjustable concurrency, delay between requests and page timeout
+64. **Pause, resume and stop** at any time, with a live activity log, rate counter and progress bar
+65. **URL pattern generator**: `img[001-500].{jpg,png}`, with numeric ranges, zero padding, steps, letters and alternatives (up to 1,000,000 URLs)
+66. Send the results to the dashboard, or export them as a URL list
+67. Right-click menu items: *Crawl this website for images…* and *Scrape images from linked page*
+
+### Large-scale downloading
+68. **No scan limits**: the number of elements examined and images collected per page are configurable (0 = unlimited)
+69. **Paged gallery rendering** stays fast with tens of thousands of results
+70. **ZIP files are split into parts** (the size is configurable, 1–3900 MB), so there's no overall size limit and memory use stays bounded
+71. **Automatic retries** with exponential backoff for failed images
+72. **Pause and resume** for downloads and ZIP packing
+73. Rate limiting: a delay between downloads to avoid being blocked
+74. The browser's download completion is tracked, so the parallel-download limit is real
+75. **Skip previously downloaded images** using a persistent download log (up to 500,000 entries, which you can clear)
+76. **Import URLs** into the dashboard by pasting or from a file, replacing or adding to the current results
+77. Unlimited local storage for history and large result sets (`unlimitedStorage`)
+
+### Worldwide web support
+78. **Hotlink-protection bypass**: sends the original page as `Referer` for image requests (via `declarativeNetRequest`)
+79. **Correct text decoding for non-UTF-8 sites**: Shift_JIS, EUC-JP, GBK, EUC-KR, Windows-1251 and other legacy encodings are detected from the BOM, headers and `<meta>`, just as browsers do
+80. Internationalized domain names and Unicode file names (UTF-8 ZIP entries)
+81. Logged-in pages: requests carry your cookies, so galleries behind a login can be scraped
+82. **JPEG XL** and **HEIC/HEIF** detection, alongside JPG, PNG, GIF, WebP, AVIF, SVG, BMP, ICO and TIFF
+
 ### Browser integration
 - Right-click menus: download an image with your naming rules, download a linked image, copy an image URL, reverse search, download all images on the page, scrape all tabs
 - Keyboard commands: `Alt+Shift+I` popup, `Alt+Shift+O` dashboard, `Alt+Shift+D` quick download (all can be changed)
@@ -121,10 +157,12 @@ src/
   manifest.json           Chrome MV3 base manifest (other browsers are derived in scripts/build.mjs)
   background/             service worker: context menus, commands, badge, quick download
   content/scraper.js      injected on demand into each frame: detection, auto-scroll, live mode, picker, highlight
-  dashboard/              main UI: filters, gallery, lightbox, downloads, ZIP, export, history
+  dashboard/              main UI: filters, gallery, lightbox, downloads, ZIP, export, history, import
+  bulk/                   bulk URL scraper, website crawler and URL pattern generator
   popup/                  toolbar popup
   options/                settings page
-  lib/                    shared modules: utils (pure), zip, imaging, scanner, settings, browser shim
+  lib/                    shared modules: utils, zip, imaging, scanner, settings, browser shim,
+                          crawler, pagefetch, robots, urlgen, crawl, downloader, referer
 scripts/build.mjs         per-browser builds and store zips (no dependencies)
 scripts/make-icons.mjs    renders the PNG icons
 tests/                    unit tests (node:test) and a Playwright end-to-end test
@@ -153,14 +191,18 @@ See [DEPLOY.md](DEPLOY.md#part-3-automated-releases-cicd) to set up automated re
 
 ```bash
 npm run check       # syntax, manifest, locale lengths, missing files, version consistency
-npm test            # unit tests: filters, templates, dedupe, dHash, exports, ZIP (checked with Python's zipfile)
+npm test            # unit tests: filters, templates, dedupe, dHash, exports, ZIP, robots.txt, URL patterns, charsets, retries
 npm run test:e2e    # loads dist/chrome into real Chromium and exercises the dashboard (needs Playwright)
 ```
 
 The end-to-end test serves `tests/fixtures/page.html`, which contains every kind
-of image source. It checks that the dashboard detects all of them, filters them,
-analyzes them, finds duplicates and produces a ZIP. It also checks history, the
-popup and the options page.
+of image source, and a small fake website in `tests/fixtures/site/`. That site
+has robots.txt, a sitemap, pagination, a hotlink-protected image, a page built
+by JavaScript and a Windows-1251 page. The test checks detection, filters,
+analysis, duplicates, ZIP files, crawling (depth, scope, robots, sitemap,
+pagination), full-render mode, charset decoding, Referer rules, skipping
+previous downloads, multi-part ZIPs, the URL generator, history, the popup and
+the options page.
 
 ## Permissions
 
@@ -170,7 +212,8 @@ popup and the options page.
 | `scripting`, `activeTab`, `tabs` | Inject the scanner into the current tab or all tabs |
 | `downloads` | Save images and ZIP files (Safari falls back to `<a download>`) |
 | `contextMenus` | Right-click actions |
-| `storage` | Settings and scrape history |
+| `storage`, `unlimitedStorage` | Settings, scrape history, download log and large result sets |
+| `declarativeNetRequestWithHostAccess` | Set the page as `Referer` on the extension's own image requests (hotlink-protected images) |
 | `clipboardWrite` | Copy URLs and images |
 
 Everything runs locally. The extension has no analytics and doesn't call any

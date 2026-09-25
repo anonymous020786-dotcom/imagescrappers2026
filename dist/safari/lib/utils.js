@@ -1,6 +1,6 @@
 // Pure helpers shared by the dashboard, background worker and unit tests.
 
-export const IMAGE_TYPES = ['jpg', 'png', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico', 'tiff', 'other'];
+export const IMAGE_TYPES = ['jpg', 'png', 'gif', 'webp', 'svg', 'avif', 'jxl', 'heic', 'bmp', 'ico', 'tiff', 'other'];
 
 const MIME_TO_TYPE = {
   'image/jpeg': 'jpg',
@@ -17,6 +17,9 @@ const MIME_TO_TYPE = {
   'image/x-icon': 'ico',
   'image/vnd.microsoft.icon': 'ico',
   'image/tiff': 'tiff',
+  'image/jxl': 'jxl',
+  'image/heic': 'heic',
+  'image/heif': 'heic',
 };
 
 const EXT_TO_TYPE = {
@@ -29,11 +32,13 @@ const EXT_TO_TYPE = {
   bmp: 'bmp',
   ico: 'ico', cur: 'ico',
   tif: 'tiff', tiff: 'tiff',
+  jxl: 'jxl',
+  heic: 'heic', heif: 'heic',
 };
 
 export const TYPE_TO_MIME = {
   jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
-  avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon', tiff: 'image/tiff',
+  avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon', tiff: 'image/tiff', jxl: 'image/jxl', heic: 'image/heic',
 };
 
 export function typeFromMime(mime) {

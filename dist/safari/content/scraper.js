@@ -12,9 +12,10 @@
     'data-original-src', 'data-actualsrc', 'data-delayed-url', 'lazy-src',
   ];
   const LAZY_SRCSET_ATTRS = ['data-srcset', 'data-lazy-srcset', 'data-original-set'];
-  const IMAGE_EXT_RE = /\.(jpe?g|jfif|png|apng|gif|webp|svgz?|avif|bmp|ico|tiff?)(?:[?#]|$)/i;
-  const MAX_ELEMENTS = 60000;
-  const MAX_RESULTS = 8000;
+  const IMAGE_EXT_RE = /\.(jpe?g|jfif|png|apng|gif|webp|svgz?|avif|jxl|heic|heif|bmp|ico|tiff?)(?:[?#]|$)/i;
+  // Defaults; both can be raised or removed (0 = unlimited) from the settings.
+  let maxElements = 100000;
+  let maxResults = 0;
 
   const elementsByUrl = new Map();
   let pickedRoot = null;
@@ -54,7 +55,7 @@
       const node = stack.pop();
       const all = node.querySelectorAll ? node.querySelectorAll('*') : [];
       for (const el of all) {
-        if (++count > MAX_ELEMENTS) return;
+        if (maxElements && ++count > maxElements) return;
         yield el;
         if (el.shadowRoot && walk.shadow) stack.push(el.shadowRoot);
       }
@@ -93,13 +94,15 @@
       ...opts,
     };
     walk.shadow = o.scanShadowDom;
+    maxElements = Number(o.maxScanElements ?? 100000) || 0;
+    maxResults = Number(o.maxScanResults ?? 0) || 0;
     elementsByUrl.clear();
     const results = [];
     const seen = new Set();
     let order = 0;
 
     function add(rawUrl, source, el, extra = {}) {
-      if (results.length >= MAX_RESULTS) return;
+      if (maxResults && results.length >= maxResults) return;
       const url = rawUrl?.startsWith('data:') ? rawUrl : absolute(rawUrl);
       if (!url) return;
       if (url.startsWith('data:') && !o.scanDataUris && source !== 'svg' && source !== 'canvas') return;
@@ -377,11 +380,23 @@
     });
   }
 
+  // Links for the crawler, plus the "next page" link if the page declares or shows one.
+  function links() {
+    const out = new Set();
+    for (const a of document.querySelectorAll('a[href], area[href]')) {
+      const url = absolute(a.getAttribute('href'));
+      if (url && /^https?:/.test(url)) out.add(url.split('#')[0]);
+    }
+    const nextEl = document.querySelector('link[rel~="next"], a[rel~="next"]') ??
+      [...document.querySelectorAll('a[href]')].find((a) => /^(next|next page|older|more|›|»|→|siguiente|suivant|weiter|次へ|下一页|далее)$/i.test(a.textContent.trim()));
+    return { links: [...out], next: nextEl ? absolute(nextEl.getAttribute('href')) : null };
+  }
+
   function count() {
     const urls = new Set();
     for (const img of document.images) if (img.currentSrc || img.src) urls.add(img.currentSrc || img.src);
     return urls.size;
   }
 
-  globalThis.__imageScraper = { scan, autoScroll, highlight, fetchAsDataUrl, watch, pick, count };
+  globalThis.__imageScraper = { scan, autoScroll, highlight, fetchAsDataUrl, watch, pick, count, links };
 })();

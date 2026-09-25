@@ -32,8 +32,28 @@ if (!existsSync(join(EXT, 'manifest.json'))) {
   process.exit(1);
 }
 
+const BIG = Buffer.alloc(400 * 1024, 7);
+let base = '';
 const server = http.createServer((req, res) => {
   const path = req.url.split('?')[0];
+  if (path === '/robots.txt') {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    return res.end(`User-agent: *\nDisallow: /site/private/\nSitemap: ${base}/sitemap.xml\n`);
+  }
+  if (path === '/sitemap.xml') {
+    res.writeHead(200, { 'content-type': 'application/xml' });
+    return res.end(`<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${base}/site/orphan.html</loc></url></urlset>`);
+  }
+  if (path.startsWith('/hotlink/')) {
+    // Simulates CDN hotlink protection: only serves requests referred by this site.
+    const ok = (req.headers.referer ?? '').startsWith(base);
+    res.writeHead(ok ? 200 : 403, { 'content-type': 'image/png' });
+    return res.end(ok ? ICON : '');
+  }
+  if (path.startsWith('/big/')) {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    return res.end(BIG);
+  }
   if (path.startsWith('/img/')) {
     res.writeHead(200, { 'content-type': 'image/png' });
     if (path.includes('pixel')) return res.end(PIXEL);
@@ -41,14 +61,16 @@ const server = http.createServer((req, res) => {
   }
   const file = path === '/' ? 'page.html' : path.slice(1);
   try {
+    let body = readFileSync(join(FIXTURES, file));
+    if (file.endsWith('gallery.html')) body = Buffer.from(body.toString().replace('HOST', `127.0.0.1:${server.address().port}`));
     res.writeHead(200, { 'content-type': 'text/html' });
-    res.end(readFileSync(join(FIXTURES, file)));
+    res.end(body);
   } catch {
     res.writeHead(404).end();
   }
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const base = `http://127.0.0.1:${server.address().port}`;
+base = `http://127.0.0.1:${server.address().port}`;
 
 const context = await chromium.launchPersistentContext('', {
   headless: true,
@@ -157,6 +179,116 @@ try {
   await check('history saved', async () => {
     const h = await worker.evaluate(async () => (await chrome.storage.local.get('history')).history);
     assert.ok(h?.length >= 1 && h[0].count > 5);
+  });
+
+
+  // ------------------------------------------------------------ bulk & crawl
+  const waitForLog = (p, text, timeout = 30000) =>
+    p.waitForFunction((t) => document.getElementById('log').textContent.includes(t), text, { timeout });
+  const statNum = async (p, id) => Number((await p.textContent(`#${id}`)).replace(/\D/g, ''));
+
+  let crawlPage;
+  await check('crawler: follows links, pagination and sitemap, obeys robots.txt', async () => {
+    crawlPage = await context.newPage();
+    await crawlPage.goto(`chrome-extension://${extId}/bulk/bulk.html?crawl=${encodeURIComponent(`${base}/site/index.html`)}`);
+    await crawlPage.fill('#maxDepth', '1');
+    await crawlPage.check('#useSitemap');
+    await crawlPage.fill('#delay', '0');
+    await crawlPage.click('#start');
+    await waitForLog(crawlPage, 'Finished');
+    const log = await crawlPage.textContent('#log');
+    assert.match(log, /robots\.txt disallows .*private\/secret\.html/);
+    for (const page of ['gallery.html', 'page1.html', 'page2.html', 'page3.html', 'orphan.html']) {
+      assert.ok(log.includes(`/site/${page}`), `did not crawl ${page}`);
+    }
+    assert.ok(!log.includes('external.invalid'), 'left the website');
+    assert.ok((await statNum(crawlPage, 'sSkipped')) >= 1);
+  });
+
+  let imported;
+  await check('crawler results open in the dashboard with every image kind', async () => {
+    const [p] = await Promise.all([context.waitForEvent('page'), crawlPage.click('#openDashboard')]);
+    imported = p;
+    await imported.waitForSelector('#gallery .card');
+    const urls = await imported.$$eval('#gallery .card .url', (els) => els.map((e) => e.textContent));
+    const has = (x) => urls.some((u) => u.includes(x));
+    for (const x of ['home.png', 'gallery-bg.png', 'gallery-lazy.png', 'g-large.png', 'protected.png', 'from-script.jpg', 'p1.png', 'p2.png', 'p3.png', 'orphan.png']) {
+      assert.ok(has(x), `missing ${x}`);
+    }
+    assert.ok(!has('g-small.png'), 'took the small srcset candidate');
+    assert.ok(!has('secret.png'), 'scraped a robots-disallowed page');
+  });
+
+  await check('hotlink-protected image loads via the Referer rule', async () => {
+    await imported.fill('#fText', 'protected');
+    await imported.waitForTimeout(400);
+    await imported.click('#selAll');
+    await imported.click('#analyze');
+    await imported.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('Analy'), null, { timeout: 15000 });
+    const size = await imported.textContent('#gallery .card .size');
+    assert.match(size, /\d+(\.\d+)? (B|KB)/, `size was "${size}"`);
+  });
+
+  await check('skip previously downloaded images', async () => {
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.sync.get('settings');
+      await chrome.storage.sync.set({ settings: { ...settings, skipDownloaded: true } });
+    });
+    await imported.waitForTimeout(300);
+    await imported.click('#downloadZip');
+    await imported.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('ZIP saved'), null, { timeout: 20000 });
+    await imported.click('#downloadZip');
+    await imported.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('downloaded before'), null, { timeout: 20000 });
+  });
+
+  await check('ZIP splits into parts past the size limit', async () => {
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.sync.get('settings');
+      await chrome.storage.sync.set({ settings: { ...settings, skipDownloaded: false, zipPartSizeMB: 1 } });
+    });
+    await imported.fill('#fText', '');
+    await imported.waitForTimeout(300);
+    await imported.click('#importBtn');
+    await imported.fill('#importText', Array.from({ length: 6 }, (_, i) => `${base}/big/${i}.png`).join('\n'));
+    await imported.click('#importGo');
+    await imported.waitForFunction(() => document.querySelectorAll('#gallery .card').length === 6);
+    const before = (await worker.evaluate(() => new Promise((r) => chrome.downloads.search({}, r)))).length;
+    await imported.click('#selAll');
+    await imported.click('#downloadZip');
+    await imported.waitForFunction(() => /ZIP saved with 6 images \(\d parts/.test(document.querySelector('.toast')?.textContent ?? ''), null, { timeout: 30000 })
+      .catch(async (err) => {
+        throw new Error(`${err.message}\nLast toast: ${await imported.textContent('.toast').catch(() => 'none')}; status: ${await imported.textContent('#statusText')}`);
+      });
+    // Playwright renames saved files, so count the new downloads instead of matching names.
+    const parts = Number(/\((\d+) parts/.exec(await imported.textContent('.toast'))[1]);
+    assert.ok(parts >= 3, `only ${parts} parts`);
+    const after = (await worker.evaluate(() => new Promise((r) => chrome.downloads.search({}, r)))).length;
+    assert.equal(after - before, parts);
+  });
+
+  await check('full-render mode finds images added by JavaScript', async () => {
+    const p = await context.newPage();
+    await p.goto(`chrome-extension://${extId}/bulk/bulk.html?mode=render&urls=${encodeURIComponent(`${base}/site/js.html`)}&autostart=1`);
+    await waitForLog(p, 'Finished', 45000);
+    assert.match(await p.textContent('#log'), /js\.html: [1-9]\d* images/);
+    assert.ok(await p.$('#thumbs img[src$="js-rendered.png"]'), 'JS-added image not found');
+  });
+
+  await check('decodes non-UTF-8 pages (Windows-1251)', async () => {
+    const p = await context.newPage();
+    await p.goto(`chrome-extension://${extId}/bulk/bulk.html?mode=fast&urls=${encodeURIComponent(`${base}/site/cp1251.html`)}&autostart=1`);
+    await waitForLog(p, 'Finished');
+    assert.match(await p.textContent('#log'), /\[windows-1251\]/);
+  });
+
+  await check('URL pattern generator', async () => {
+    const p = await context.newPage();
+    await p.goto(`chrome-extension://${extId}/bulk/bulk.html`);
+    await p.click('[data-tab="generate"]');
+    await p.fill('#pattern', `${base}/img/gen[01-25].{png,jpg}`);
+    assert.match(await p.textContent('#patternInfo'), /^50 URLs/);
+    await p.click('#start');
+    assert.equal(await statNum(p, 'sImages'), 50);
   });
 
   await check('popup renders counts', async () => {

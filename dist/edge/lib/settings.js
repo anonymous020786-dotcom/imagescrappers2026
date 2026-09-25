@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS = {
   autoScrollDelay: 350,
   preferHighestResolution: true,
   ignoreQueryForDedupe: false,
+  maxScanElements: 100000, // 0 = unlimited
+  maxScanResults: 0, // 0 = unlimited
 
   // Default filters
   minWidth: 0,
@@ -37,6 +39,11 @@ export const DEFAULT_SETTINGS = {
   convertTo: 'original',
   jpegQuality: 0.92,
   zipName: '{pagedomain}_{date}_{time}',
+  zipPartSizeMB: 1024,
+  retries: 2,
+  requestDelay: 0,
+  skipDownloaded: false,
+  sendReferer: true,
 
   // UI
   theme: 'system',
@@ -44,6 +51,7 @@ export const DEFAULT_SETTINGS = {
   view: 'grid',
   showBadge: true,
   historyLimit: 25,
+  historyImageLimit: 5000, // 0 = keep every image URL
   duplicateThreshold: 5,
   reverseSearchEngine: 'google',
 };

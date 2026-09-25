@@ -22,6 +22,10 @@ $('pick').onclick = () => openDashboard({ tabId: tab.id, pick: 1 });
 $('scroll').onclick = () => openDashboard({ tabId: tab.id, autoscroll: 1 });
 $('alltabs').onclick = () => openDashboard({ windowId: tab.windowId, mode: 'alltabs' });
 $('history').onclick = () => openDashboard({ mode: 'history' });
+$('bulk').onclick = () => {
+  const params = /^https?:/.test(tab?.url ?? '') ? { crawl: tab.url } : {};
+  api.runtime.sendMessage({ type: 'open-bulk', params }).then(() => window.close());
+};
 $('quick').onclick = async () => {
   $('quick').disabled = true;
   $('quick').textContent = 'Downloading…';
