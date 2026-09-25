@@ -21,6 +21,8 @@ Pre-built packages are committed in [`dist/`](dist). You don't need to build any
 - **Store-ready zips**: `dist/image-scraper-pro-<browser>-1.1.0.zip`
 
 See **[DEPLOY.md](DEPLOY.md)** for step-by-step install instructions for every browser and how to publish to each store.
+The Chrome Web Store listing (description, permission justifications, screenshots, promo tiles) is ready in
+[`store/chrome/`](store/chrome/LISTING.md), and the privacy policy is [PRIVACY.md](PRIVACY.md).
 
 ## Build from source
 
