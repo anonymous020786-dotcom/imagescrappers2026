@@ -2,6 +2,7 @@ import { api } from '../lib/browser.js';
 import { DEFAULT_SETTINGS, applyTheme, loadSettings, resetSettings, saveSettings } from '../lib/settings.js';
 import { buildFilename } from '../lib/utils.js';
 import { DownloadLog } from '../lib/downloader.js';
+import { access, onAccessChange, refreshAccess, requestAllSites, revokeAllSites } from '../lib/access.js';
 
 const form = document.getElementById('form');
 let settings = await loadSettings();
@@ -100,3 +101,19 @@ document.getElementById('shortcuts').onclick = () => {
 };
 
 fill(settings);
+
+// ------------------------------------------------------------ site access
+
+function showAccess(granted) {
+  document.getElementById('accessStatus').textContent = granted
+    ? '✅ Allowed on all sites: every feature is available.'
+    : 'Limited: works on the tab where you click the Image Scraper icon.';
+  document.getElementById('accessToggle').textContent = granted ? 'Remove access to all sites' : 'Allow access to all sites';
+}
+if (api.permissions?.contains) {
+  showAccess(await refreshAccess());
+  onAccessChange(showAccess);
+  document.getElementById('accessToggle').onclick = () => (access.granted ? revokeAllSites() : requestAllSites());
+} else {
+  document.getElementById('siteAccess').hidden = true;
+}

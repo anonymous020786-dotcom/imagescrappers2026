@@ -1,11 +1,15 @@
 // End-to-end smoke test: loads dist/chrome into Chromium, scans a fixture page
 // through the real dashboard, and checks detection, filtering and ZIP export.
 //
+// dist/chrome asks for access to all sites at runtime (optional_host_permissions). The main suite runs a
+// copy in the state after the user allowed it; a second suite checks the shipped, limited state.
+//
 //   npm run build:chrome && node tests/e2e/extension.e2e.mjs
 //
 // Requires Playwright (npm i -D playwright, or a global install).
 import http from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
@@ -30,6 +34,16 @@ try {
 if (!existsSync(join(EXT, 'manifest.json'))) {
   console.error('Build first: node scripts/build.mjs chrome');
   process.exit(1);
+}
+
+// The same build with access to all sites already granted (what "Allow access to all sites" does).
+const EXT_GRANTED = mkdtempSync(join(tmpdir(), 'image-scraper-granted-'));
+cpSync(EXT, EXT_GRANTED, { recursive: true });
+{
+  const manifest = JSON.parse(readFileSync(join(EXT_GRANTED, 'manifest.json'), 'utf8'));
+  manifest.host_permissions = manifest.optional_host_permissions;
+  delete manifest.optional_host_permissions;
+  writeFileSync(join(EXT_GRANTED, 'manifest.json'), JSON.stringify(manifest));
 }
 
 const BIG = Buffer.alloc(400 * 1024, 7);
@@ -75,12 +89,13 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 base = `http://127.0.0.1:${server.address().port}`;
 
-const context = await chromium.launchPersistentContext('', {
+const launch = (ext) => chromium.launchPersistentContext('', {
   headless: true,
   channel: 'chromium',
-  args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
+  args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
   acceptDownloads: true,
 });
+const context = await launch(EXT_GRANTED);
 
 let failures = 0;
 async function check(name, fn) {
@@ -314,7 +329,62 @@ try {
   });
 } finally {
   await context.close();
+}
+
+// ------------------------------------------------------------ limited mode (the build as shipped)
+console.log('\nLimited mode (access to all sites not granted yet):');
+const limited = await launch(EXT);
+try {
+  let [worker] = limited.serviceWorkers();
+  worker ??= await limited.waitForEvent('serviceworker');
+  const extId = new URL(worker.url()).host;
+
+  await check('manifest asks for access to all sites only at runtime', () => {
+    const manifest = JSON.parse(readFileSync(join(EXT, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.host_permissions, undefined);
+    assert.deepEqual(manifest.optional_host_permissions, ['<all_urls>']);
+    assert.ok(manifest.permissions.includes('activeTab'));
+  });
+  const page = await limited.newPage();
+  await page.goto(`${base}/`);
+  const tabId = await worker.evaluate(async (url) => (await chrome.tabs.query({ url: `${url}/*` }))[0].id, base);
+  const dash = await limited.newPage();
+  await dash.goto(`chrome-extension://${extId}/dashboard/dashboard.html?tabId=${tabId}`);
+
+  await check('not granted after install', async () => {
+    assert.equal(await dash.evaluate(() => chrome.permissions.contains({ origins: ['<all_urls>'] })), false);
+  });
+  await check('scanning a tab without access explains what to do', async () => {
+    await dash.waitForFunction(() => /No access to this tab/.test(document.getElementById('sourceInfo').textContent), null, { timeout: 15000 });
+  });
+  await check('dashboard shows the "Allow access to all sites" banner', async () => {
+    assert.ok(await dash.isVisible('#allowAllSites'));
+  });
+  await check('Analyze without access explains why instead of failing', async () => {
+    // Playwright's evaluate counts as a user gesture, which would open Chrome's permission prompt (which a
+    // headless browser can't answer). Clicking after the ~5 s gesture window has expired makes Chrome refuse
+    // to prompt, which is the path to test: the dashboard must say why nothing happened.
+    await dash.evaluate(() => setTimeout(() => document.getElementById('analyze').click(), 6000));
+    await dash.waitForFunction(() => /needs access to all sites/i.test(document.querySelector('.toast')?.textContent ?? ''), null, { timeout: 15000 });
+  });
+
+  const bulk = await limited.newPage();
+  await bulk.goto(`chrome-extension://${extId}/bulk/bulk.html?urls=${encodeURIComponent(`${base}/`)}&autostart=1`);
+  await check('bulk scraper waits for access instead of fetching', async () => {
+    await bulk.waitForFunction(() => /needs access to all sites/i.test(document.getElementById('log').textContent), null, { timeout: 10000 });
+    assert.ok(await bulk.isVisible('#allowAllSites'));
+  });
+
+  const opts = await limited.newPage();
+  await opts.goto(`chrome-extension://${extId}/options/options.html`);
+  await check('options page shows the site-access switch', async () => {
+    await opts.waitForFunction(() => /Limited/.test(document.getElementById('accessStatus').textContent));
+    assert.equal(await opts.textContent('#accessToggle'), 'Allow access to all sites');
+  });
+} finally {
+  await limited.close();
   server.close();
+  rmSync(EXT_GRANTED, { recursive: true, force: true });
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll end-to-end checks passed');

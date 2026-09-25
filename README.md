@@ -18,7 +18,7 @@ de-duplicate, convert and bulk-download them, individually or as one ZIP file.
 Pre-built packages are committed in [`dist/`](dist). You don't need to build anything:
 
 - **Unpacked folders** to load directly: `dist/chrome`, `dist/edge`, `dist/brave`, `dist/opera`, `dist/vivaldi`, `dist/firefox`, `dist/safari`
-- **Store-ready zips**: `dist/image-scraper-pro-<browser>-1.1.0.zip`
+- **Store-ready zips**: `dist/image-scraper-pro-<browser>-1.2.0.zip`
 
 See **[DEPLOY.md](DEPLOY.md)** for step-by-step install instructions for every browser and how to publish to each store.
 The Chrome Web Store listing (description, permission justifications, screenshots, promo tiles) is ready in
@@ -214,8 +214,8 @@ the options page.
 
 | Permission | Why |
 | --- | --- |
-| `<all_urls>` host access | Scan pages, and fetch images across origins for analysis, ZIP and conversion |
-| `scripting`, `activeTab`, `tabs` | Inject the scanner into the current tab or all tabs |
+| `<all_urls>` host access, **optional** in Chrome, Edge, Brave, Opera and Vivaldi | Asked for the first time you use a feature that fetches from other sites: analyze, ZIP, convert, duplicates, copy image, all tabs, bulk scraping and crawling, and the Referer rules. Until then the extension works on the tab where you click its icon (`activeTab`). It can be allowed or removed in the options. Firefox and Safari declare it up front and let you manage site access in the browser. |
+| `scripting`, `activeTab`, `tabs` | Inject the scanner into the tab you invoke it on (or all tabs, with access to all sites) |
 | `downloads` | Save images and ZIP files (Safari falls back to `<a download>`) |
 | `contextMenus` | Right-click actions |
 | `storage`, `unlimitedStorage` | Settings, scrape history, download log and large result sets |

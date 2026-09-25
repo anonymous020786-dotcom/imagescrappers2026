@@ -8,7 +8,8 @@
 // It serves a demo photo site with generated landscape images, loads dist/chrome into Chromium with
 // Playwright and screenshots the real UI, so the listing always matches what users get.
 import http from 'node:http';
-import { mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -33,6 +34,16 @@ if (!existsSync(join(EXT, 'manifest.json'))) {
   process.exit(1);
 }
 mkdirSync(OUT, { recursive: true });
+
+// Screenshot the full feature set: a copy of the build with access to all sites already granted.
+const GRANTED = mkdtempSync(join(tmpdir(), 'image-scraper-assets-'));
+cpSync(EXT, GRANTED, { recursive: true });
+{
+  const manifest = JSON.parse(readFileSync(join(GRANTED, 'manifest.json'), 'utf8'));
+  manifest.host_permissions = manifest.optional_host_permissions ?? manifest.host_permissions;
+  delete manifest.optional_host_permissions;
+  writeFileSync(join(GRANTED, 'manifest.json'), JSON.stringify(manifest));
+}
 
 // ------------------------------------------------------------------ demo photos (deterministic SVG scenes)
 const PALETTES = [
@@ -129,8 +140,8 @@ const context = await chromium.launchPersistentContext('', {
   channel: 'chromium',
   viewport: { width: W, height: H },
   args: [
-    `--disable-extensions-except=${EXT}`,
-    `--load-extension=${EXT}`,
+    `--disable-extensions-except=${GRANTED}`,
+    `--load-extension=${GRANTED}`,
     `--host-resolver-rules=MAP ${HOST}:80 127.0.0.1:${server.address().port}`,
   ],
 });
@@ -168,7 +179,9 @@ try {
   const dash = await context.newPage();
   await dash.goto(`chrome-extension://${extId}/dashboard/dashboard.html?tabId=${tabId}`);
   await dash.waitForFunction(() => document.querySelectorAll('#gallery .card').length >= 12, null, { timeout: 20000 });
-  await dash.waitForTimeout(1500);
+  // Every thumbnail decoded, so none is captured blank.
+  await dash.waitForFunction(() => [...document.querySelectorAll('#gallery img')].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 20000 });
+  await dash.waitForTimeout(500);
   await dash.screenshot({ path: join(OUT, 'screenshot-1.png') });
   console.log('✔ store/chrome/screenshot-1.png');
 
@@ -233,4 +246,5 @@ try {
 } finally {
   await context.close();
   server.close();
+  rmSync(GRANTED, { recursive: true, force: true });
 }

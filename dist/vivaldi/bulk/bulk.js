@@ -4,11 +4,17 @@ import { Crawler } from '../lib/crawler.js';
 import { extractUrls } from '../lib/crawl.js';
 import { expandPattern } from '../lib/urlgen.js';
 import { guessType, toText } from '../lib/utils.js';
+import { NEEDS_ACCESS, mountAccessBanner, refreshAccess, requestAllSites } from '../lib/access.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const settings = await loadSettings();
 applyTheme(settings.theme);
+await refreshAccess();
+mountAccessBanner(
+  document.querySelector('main'),
+  'The bulk scraper and crawler fetch pages and images from the sites you list, so they need access to all sites.',
+);
 
 const MAX_GENERATED = 1_000_000;
 const OPTION_IDS = ['mode', 'concurrency', 'delay', 'maxPages', 'timeout', 'respectRobots', 'followNext', 'autoScroll', 'scope', 'maxDepth', 'include', 'exclude', 'useSitemap', 'patternAs'];
@@ -131,6 +137,11 @@ function addThumbs(images) {
 // --------------------------------------------------------------------- run
 
 async function start() {
+  // Must come first: the permission prompt only appears during the Start click.
+  if (!(await requestAllSites())) {
+    log(`${NEEDS_ACCESS} Click Start to allow it.`, 'error');
+    return;
+  }
   saveOptions();
   const options = {
     mode: $('mode').value,

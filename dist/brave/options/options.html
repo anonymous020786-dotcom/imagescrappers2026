@@ -19,6 +19,14 @@
     </header>
 
     <form id="form">
+      <fieldset id="siteAccess">
+        <legend>Site access</legend>
+        <p id="accessStatus">Checking…</p>
+        <p class="muted small">Without it, Image Scraper works on the tab you click its icon on. Access to all sites is
+          needed to analyze, ZIP, convert and de-duplicate images hosted on other domains, to scan all tabs, and for
+          the bulk scraper and crawler. The extension still only acts when you ask it to.</p>
+        <button type="button" id="accessToggle">…</button>
+      </fieldset>
       <fieldset>
         <legend>What to scan</legend>
         <div class="checks">

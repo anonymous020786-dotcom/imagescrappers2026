@@ -1,6 +1,6 @@
 {
   "name": "image-scraper-pro",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Advanced cross-browser image scraper extension (Chrome, Edge, Brave, Opera, Vivaldi, Firefox, Safari).",
   "private": true,
   "type": "module",
