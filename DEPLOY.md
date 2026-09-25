@@ -112,12 +112,11 @@ review, typically a few days, in every store.
 1. Sign up at the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
    There's a one-time registration fee.
 2. Click **New item** and upload `dist/image-scraper-pro-chrome-<ver>.zip`.
-3. Fill in these tabs:
-   - **Store listing**: description, category *Productivity* (or *Tools*), screenshots.
-   - **Privacy practices**: the single purpose ("Find and download images on
-     web pages"), a reason for every permission, the privacy policy URL, and the
-     data-usage certification (this extension collects no user data).
-   - **Distribution**: *Public* or *Unlisted*, and which countries.
+3. Fill in the tabs. **[store/chrome/LISTING.md](store/chrome/LISTING.md) has every field ready to copy:** the
+   description, category, the single purpose, a justification for each permission, the data-usage answers,
+   test instructions and the privacy policy URL ([PRIVACY.md](PRIVACY.md)). The screenshots (1280×800), the
+   small promo tile (440×280) and the marquee (1400×560) are in `store/chrome/`. Regenerate them from the real
+   extension with `npm run build:chrome && npm run store:assets`.
 4. Click **Submit for review**.
 5. For updates, raise the version, rebuild, then go to **Package → Upload new
    package** and submit again.
