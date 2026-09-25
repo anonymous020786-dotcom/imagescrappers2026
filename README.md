@@ -150,6 +150,10 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 - Keyboard shortcuts in the dashboard: `/` search · `Ctrl+A` select all · `Ctrl+C` copy URLs · `D` download · `Z` ZIP · `R` rescan · `Del` remove · `Esc` clear
 - Store listing localized in English, Spanish, German and French
 
+## Roadmap
+
+- **Video scraping** (planned): finding `<video>`/`<audio>` elements, video links and metadata, network capture of streamed media, unencrypted HLS downloads and a Videos page. See [docs/VIDEO_SCRAPER_PLAN.md](docs/VIDEO_SCRAPER_PLAN.md).
+
 ## Project layout
 
 ```
