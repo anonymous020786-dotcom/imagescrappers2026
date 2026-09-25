@@ -1,0 +1,19 @@
+{
+  "name": "image-scraper-pro",
+  "version": "1.0.0",
+  "description": "Advanced cross-browser image scraper extension (Chrome, Edge, Brave, Opera, Vivaldi, Firefox, Safari).",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:chrome": "node scripts/build.mjs chrome",
+    "build:firefox": "node scripts/build.mjs firefox",
+    "build:edge": "node scripts/build.mjs edge",
+    "build:safari": "node scripts/build.mjs safari",
+    "icons": "node scripts/make-icons.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:e2e": "node scripts/build.mjs chrome && node tests/e2e/extension.e2e.mjs"
+  },
+  "engines": { "node": ">=20" }
+}

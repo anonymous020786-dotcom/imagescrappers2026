@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Image Scraper Pro</title>
+  <link rel="icon" href="../icons/icon32.png">
+  <link rel="stylesheet" href="../lib/theme.css">
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="../icons/icon32.png" alt="" width="24" height="24">
+      <div>
+        <strong>Image Scraper Pro</strong>
+        <div id="sourceInfo" class="muted small">Loading…</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="rescan" title="Scan the page again (R)">⟳ Rescan</button>
+      <button id="autoscroll" title="Scroll the page to load lazy images, then rescan">⇣ Auto-scroll</button>
+      <button id="pick" title="Pick an area on the page; only images inside it are scraped">⌖ Pick area</button>
+      <button id="live" title="Watch the page and add new images automatically (infinite scroll)">● Live</button>
+      <button id="alltabs" title="Scrape every tab in this window">⧉ All tabs</button>
+      <button id="historyBtn" title="Previous scrapes">🕘 History</button>
+      <button id="themeBtn" title="Switch theme">◐</button>
+      <button id="optionsBtn" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <section>
+        <h3>Search</h3>
+        <input id="fText" type="search" placeholder="URL, alt text or title  ( / )">
+        <label class="inline"><input id="fRegex" type="checkbox"> Regular expression</label>
+      </section>
+
+      <section>
+        <h3>Dimensions (px)</h3>
+        <div class="grid2">
+          <input id="fMinW" type="number" min="0" placeholder="Min W">
+          <input id="fMinH" type="number" min="0" placeholder="Min H">
+          <input id="fMaxW" type="number" min="0" placeholder="Max W">
+          <input id="fMaxH" type="number" min="0" placeholder="Max H">
+        </div>
+        <div class="presets">
+          <button data-preset="0">Any</button>
+          <button data-preset="100">≥100</button>
+          <button data-preset="300">≥300</button>
+          <button data-preset="800">≥800</button>
+          <button data-preset="1920">HD</button>
+        </div>
+        <label class="inline"><input id="fKeepUnknown" type="checkbox"> Keep images with unknown size</label>
+        <label class="inline"><input id="fHideTracking" type="checkbox"> Hide tracking pixels (≤2px)</label>
+      </section>
+
+      <section>
+        <h3>Shape</h3>
+        <select id="fAspect">
+          <option value="any">Any shape</option>
+          <option value="landscape">Landscape</option>
+          <option value="portrait">Portrait</option>
+          <option value="square">Square</option>
+        </select>
+      </section>
+
+      <section>
+        <h3>File size (KB) <span class="muted small">after Analyze</span></h3>
+        <div class="grid2">
+          <input id="fMinKB" type="number" min="0" placeholder="Min KB">
+          <input id="fMaxKB" type="number" min="0" placeholder="Max KB">
+        </div>
+      </section>
+
+      <section>
+        <h3>File type</h3>
+        <div id="fTypes" class="chips"></div>
+      </section>
+
+      <section>
+        <h3>Found in</h3>
+        <div id="fSources" class="chips"></div>
+      </section>
+
+      <section>
+        <h3>Domain</h3>
+        <select id="fDomain"><option value="">All domains</option></select>
+      </section>
+
+      <section>
+        <h3>Duplicates</h3>
+        <label class="inline"><input id="fHideDupes" type="checkbox"> Hide visual duplicates</label>
+        <label class="inline"><input id="fSelectedOnly" type="checkbox"> Show selected only</label>
+      </section>
+
+      <section>
+        <h3>Sort</h3>
+        <div class="grid2">
+          <select id="sortKey">
+            <option value="order">Page order</option>
+            <option value="area">Resolution</option>
+            <option value="width">Width</option>
+            <option value="height">Height</option>
+            <option value="bytes">File size</option>
+            <option value="name">File name</option>
+            <option value="type">Type</option>
+            <option value="domain">Domain</option>
+          </select>
+          <select id="sortDir">
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
+        </div>
+      </section>
+
+      <button id="resetFilters" class="wide">Reset filters</button>
+    </aside>
+
+    <main>
+      <div class="toolbar">
+        <button id="toggleSidebar" title="Show or hide filters">☰</button>
+        <button id="selAll" title="Select all visible (Ctrl+A)">Select all</button>
+        <button id="selNone" title="Clear selection (Esc)">None</button>
+        <button id="selInvert">Invert</button>
+        <button id="removeSel" title="Remove selected from results (Del)">Remove</button>
+        <span id="stats" class="muted stats"></span>
+        <span class="spacer"></span>
+        <button id="analyze" title="Fetch every visible image to get exact size, dimensions, colour and fingerprint">Analyze</button>
+        <button id="dupes" title="Find visually identical images (perceptual hash)">Find duplicates</button>
+        <div class="seg">
+          <button id="viewGrid" title="Grid view">▦</button>
+          <button id="viewList" title="List view">☰</button>
+        </div>
+        <input id="thumbSize" type="range" min="90" max="340" step="10" title="Thumbnail size">
+      </div>
+
+      <div id="status" class="status hidden">
+        <div class="bar"><div id="progress"></div></div>
+        <span id="statusText"></span>
+        <button id="cancel" class="danger">Cancel</button>
+      </div>
+
+      <div id="empty" class="empty hidden"></div>
+      <div id="gallery" class="gallery grid"></div>
+    </main>
+  </div>
+
+  <footer class="actionbar">
+    <span id="selInfo" class="muted"></span>
+    <span class="spacer"></span>
+    <label class="muted small">Convert
+      <select id="convertTo">
+        <option value="original">Original</option>
+        <option value="png">PNG</option>
+        <option value="jpeg">JPEG</option>
+        <option value="webp">WebP</option>
+      </select>
+    </label>
+    <div class="menu-wrap">
+      <button id="exportBtn">Export ▾</button>
+      <div id="exportMenu" class="menu hidden">
+        <button data-export="txt">URL list (.txt)</button>
+        <button data-export="csv">Spreadsheet (.csv)</button>
+        <button data-export="json">Metadata (.json)</button>
+        <button data-export="html">HTML gallery (.html)</button>
+      </div>
+    </div>
+    <button id="copyUrls" title="Copy selected URLs (Ctrl+C)">Copy URLs</button>
+    <button id="downloadZip" title="Download selected as one ZIP file (Z)">Download ZIP</button>
+    <button id="download" class="primary" title="Download selected (D)">Download</button>
+  </footer>
+
+  <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true" aria-label="Image preview">
+    <button id="lbClose" class="lb-close" title="Close (Esc)">✕</button>
+    <button id="lbPrev" class="lb-nav prev" title="Previous (←)">‹</button>
+    <div id="lbStage" class="lb-stage checker"><img id="lbImg" alt=""></div>
+    <button id="lbNext" class="lb-nav next" title="Next (→)">›</button>
+    <aside class="lb-info">
+      <h3 id="lbTitle"></h3>
+      <dl id="lbMeta"></dl>
+      <div class="lb-actions">
+        <button id="lbSelect">Select</button>
+        <button id="lbDownload" class="primary">Download</button>
+        <button id="lbCopyImg">Copy image</button>
+        <button id="lbCopyUrl">Copy URL</button>
+        <button id="lbOpen">Open in tab</button>
+        <button id="lbHighlight">Show on page</button>
+        <select id="lbSearchEngine" title="Reverse image search engine">
+          <option value="google">Google Lens</option>
+          <option value="bing">Bing Visual</option>
+          <option value="tineye">TinEye</option>
+          <option value="yandex">Yandex</option>
+        </select>
+        <button id="lbSearch">Reverse search</button>
+      </div>
+      <p class="muted small">Scroll or click to zoom · drag to pan · ← → to browse · Space to select</p>
+    </aside>
+  </div>
+
+  <div id="historyPanel" class="drawer hidden" role="dialog" aria-label="History">
+    <div class="drawer-head">
+      <h3>Scrape history</h3>
+      <button id="clearHistory" class="danger">Clear</button>
+      <button id="closeHistory">✕</button>
+    </div>
+    <div id="historyList"></div>
+  </div>
+
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

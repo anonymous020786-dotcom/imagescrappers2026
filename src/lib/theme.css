@@ -1,0 +1,115 @@
+:root {
+  --bg: #f6f6f9;
+  --surface: #ffffff;
+  --surface-2: #eeeef4;
+  --border: #dcdce6;
+  --text: #1b1b24;
+  --muted: #666679;
+  --accent: #5b4bdb;
+  --accent-contrast: #ffffff;
+  --accent-soft: #e9e6ff;
+  --danger: #c62f4a;
+  --ok: #1a7f37;
+  --checker: #e7e7ee;
+  --shadow: 0 6px 24px rgba(20, 20, 40, 0.12);
+  --radius: 10px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #111118;
+    --surface: #1b1b25;
+    --surface-2: #252532;
+    --border: #33333f;
+    --text: #ececf3;
+    --muted: #9a9aad;
+    --accent: #8b7dff;
+    --accent-contrast: #0e0e14;
+    --accent-soft: #2c2850;
+    --danger: #ff6b86;
+    --ok: #4cc26b;
+    --checker: #22222d;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #111118;
+  --surface: #1b1b25;
+  --surface-2: #252532;
+  --border: #33333f;
+  --text: #ececf3;
+  --muted: #9a9aad;
+  --accent: #8b7dff;
+  --accent-contrast: #0e0e14;
+  --accent-soft: #2c2850;
+  --danger: #ff6b86;
+  --ok: #4cc26b;
+  --checker: #22222d;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+button, select, input, textarea { font: inherit; color: inherit; }
+
+button {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); font-weight: 600; }
+button.danger { color: var(--danger); }
+button.active { background: var(--accent-soft); border-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+input[type='text'], input[type='number'], input[type='search'], select, textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 8px;
+  min-width: 0;
+}
+
+label { cursor: pointer; }
+.muted { color: var(--muted); }
+.hidden { display: none !important; }
+
+.checker {
+  background-color: var(--checker);
+  background-image: linear-gradient(45deg, var(--surface-2) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--surface-2) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--surface-2) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--surface-2) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--bg);
+  padding: 9px 16px;
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  max-width: calc(100vw - 32px);
+}
