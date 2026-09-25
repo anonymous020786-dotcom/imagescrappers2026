@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Image Scraper Pro Settings</title>
+  <link rel="icon" href="../icons/icon32.png">
+  <link rel="stylesheet" href="../lib/theme.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="../icons/icon48.png" alt="" width="36" height="36">
+      <div>
+        <h1>Image Scraper Pro settings</h1>
+        <p class="muted">Changes save automatically and sync across your signed-in browsers.</p>
+      </div>
+    </header>
+
+    <form id="form">
+      <fieldset>
+        <legend>What to scan</legend>
+        <div class="checks">
+          <label><input type="checkbox" name="scanImgTags"> &lt;img&gt; and image inputs</label>
+          <label><input type="checkbox" name="scanSrcset"> srcset and &lt;picture&gt; sources</label>
+          <label><input type="checkbox" name="preferHighestResolution"> Prefer the highest resolution in srcset</label>
+          <label><input type="checkbox" name="scanLazyAttrs"> Lazy-load attributes (data-src, data-original…)</label>
+          <label><input type="checkbox" name="scanBackgrounds"> CSS background, border and mask images</label>
+          <label><input type="checkbox" name="scanPseudo"> ::before / ::after pseudo-elements</label>
+          <label><input type="checkbox" name="scanSvg"> Inline SVG (exported as .svg)</label>
+          <label><input type="checkbox" name="scanCanvas"> Canvas elements (exported as .png)</label>
+          <label><input type="checkbox" name="scanVideoPosters"> Video poster frames</label>
+          <label><input type="checkbox" name="scanLinks"> Links pointing to image files</label>
+          <label><input type="checkbox" name="scanMeta"> Open Graph, Twitter, JSON-LD and favicons</label>
+          <label><input type="checkbox" name="scanShadowDom"> Inside Shadow DOM (web components)</label>
+          <label><input type="checkbox" name="scanDataUris"> Inline data: URI images</label>
+          <label><input type="checkbox" name="allFrames"> Inside iframes</label>
+          <label><input type="checkbox" name="ignoreQueryForDedupe"> Treat URLs that differ only in ?query as duplicates</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Auto-scroll</legend>
+        <label class="row"><input type="checkbox" name="autoScroll"> Always auto-scroll before scanning</label>
+        <div class="grid">
+          <label>Maximum scroll steps <input type="number" name="autoScrollMaxSteps" min="1" max="500"></label>
+          <label>Delay per step (ms) <input type="number" name="autoScrollDelay" min="50" max="5000" step="50"></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Default filters</legend>
+        <div class="grid">
+          <label>Minimum width <input type="number" name="minWidth" min="0"></label>
+          <label>Minimum height <input type="number" name="minHeight" min="0"></label>
+        </div>
+        <label class="row"><input type="checkbox" name="hideTracking"> Hide tracking pixels</label>
+        <label class="row"><input type="checkbox" name="keepUnknownSize"> Keep images whose size isn't known yet</label>
+        <label class="block">Blocked URLs, one per line. Use <code>*</code> wildcards or <code>/regex/</code>.
+          <textarea name="blocklist" rows="6" spellcheck="false"></textarea>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Downloads</legend>
+        <label class="block">File name template
+          <input type="text" name="filenameTemplate" spellcheck="false">
+        </label>
+        <label class="block">Folder template (inside your Downloads folder)
+          <input type="text" name="folderTemplate" spellcheck="false">
+        </label>
+        <label class="block">ZIP file name template
+          <input type="text" name="zipName" spellcheck="false">
+        </label>
+        <p class="muted small">Tokens: <code>{name}</code> <code>{index}</code> <code>{index:3}</code> <code>{domain}</code> <code>{pagedomain}</code> <code>{title}</code> <code>{date}</code> <code>{time}</code> <code>{timestamp}</code> <code>{width}</code> <code>{height}</code> <code>{alt}</code> <code>{type}</code> <code>{source}</code></p>
+        <p class="preview">Preview: <code id="preview"></code></p>
+        <div class="grid">
+          <label>If the file exists
+            <select name="conflictAction">
+              <option value="uniquify">Add a number</option>
+              <option value="overwrite">Overwrite</option>
+              <option value="prompt">Ask me</option>
+            </select>
+          </label>
+          <label>Parallel downloads <input type="number" name="concurrency" min="1" max="16"></label>
+          <label>Default conversion
+            <select name="convertTo">
+              <option value="original">Keep original format</option>
+              <option value="png">PNG</option>
+              <option value="jpeg">JPEG</option>
+              <option value="webp">WebP</option>
+            </select>
+          </label>
+          <label>JPEG / WebP quality <input type="number" name="jpegQuality" min="0.1" max="1" step="0.01"></label>
+        </div>
+        <label class="row"><input type="checkbox" name="saveAs"> Show the "Save as" dialog for single downloads</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Interface</legend>
+        <div class="grid">
+          <label>Theme
+            <select name="theme">
+              <option value="system">Match system</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+          <label>Reverse image search
+            <select name="reverseSearchEngine">
+              <option value="google">Google Lens</option>
+              <option value="bing">Bing Visual Search</option>
+              <option value="tineye">TinEye</option>
+              <option value="yandex">Yandex</option>
+            </select>
+          </label>
+          <label>History entries to keep <input type="number" name="historyLimit" min="0" max="200"></label>
+          <label>Duplicate sensitivity (0–20 bits) <input type="number" name="duplicateThreshold" min="0" max="20"></label>
+        </div>
+        <label class="row"><input type="checkbox" name="showBadge"> Show the image count on the toolbar icon</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Backup</legend>
+        <div class="buttons">
+          <button type="button" id="export">Export settings</button>
+          <button type="button" id="import">Import settings</button>
+          <button type="button" id="reset" class="danger">Reset to defaults</button>
+          <button type="button" id="shortcuts">Keyboard shortcuts…</button>
+        </div>
+        <input type="file" id="importFile" accept="application/json" class="hidden">
+      </fieldset>
+    </form>
+    <p id="saved" class="muted small">&nbsp;</p>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

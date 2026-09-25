@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Scraper fixture</title>
+  <meta property="og:image" content="/img/og.png">
+  <link rel="icon" href="/img/favicon.png" sizes="32x32">
+  <script type="application/ld+json">{"@type":"Product","image":["/img/ld.png"]}</script>
+  <style>
+    .bg { width: 100px; height: 100px; background-image: url('/img/bg.png'); }
+    .pseudo::before { content: url('/img/pseudo.png'); }
+  </style>
+</head>
+<body>
+  <img id="plain" src="/img/plain.png" alt="Plain image" width="128" height="128">
+  <img id="responsive" src="/img/small.png" srcset="/img/small.png 48w, /img/large.png 128w" sizes="48px" alt="Responsive">
+  <picture><source srcset="/img/picture.png 2x"><img src="/img/picture-fallback.png" alt="Picture"></picture>
+  <img class="lazy" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/img/lazy.png" alt="Lazy">
+  <img id="pixel" src="/img/pixel.png" width="1" height="1" alt="">
+  <div class="bg"></div>
+  <div class="pseudo"></div>
+  <svg width="40" height="40" viewBox="0 0 40 40"><title>Circle</title><circle cx="20" cy="20" r="18" fill="tomato"/></svg>
+  <canvas id="cv" width="30" height="30"></canvas>
+  <video poster="/img/poster.png" width="64" height="48"></video>
+  <a href="/img/linked.jpg">Full size</a>
+  <div id="host"></div>
+  <iframe src="/frame.html" width="200" height="100"></iframe>
+  <script>
+    const c = document.getElementById('cv').getContext('2d');
+    c.fillStyle = 'blue'; c.fillRect(0, 0, 30, 30);
+    const root = document.getElementById('host').attachShadow({ mode: 'open' });
+    root.innerHTML = '<img src="/img/shadow.png" alt="Shadow">';
+  </script>
+</body>
+</html>
