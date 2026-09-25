@@ -17,6 +17,8 @@ Pre-built packages are committed in [`dist/`](dist). You don't need to build any
 - **Unpacked folders** to load directly: `dist/chrome`, `dist/edge`, `dist/brave`, `dist/opera`, `dist/vivaldi`, `dist/firefox`, `dist/safari`
 - **Store-ready zips**: `dist/image-scraper-pro-<browser>-1.0.0.zip`
 
+See **[DEPLOY.md](DEPLOY.md)** for step-by-step install instructions for every browser and how to publish to each store.
+
 ## Build from source
 
 ```bash
