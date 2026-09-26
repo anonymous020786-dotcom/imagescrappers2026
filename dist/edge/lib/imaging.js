@@ -1,6 +1,6 @@
 // Browser-only image helpers used by extension pages (dashboard).
 import { callInTab } from './scanner.js';
-import { dHashFromGray, typeFromMime } from './utils.js';
+import { dHashFromGray, fitWithin, typeFromMime } from './utils.js';
 
 const blobCache = new Map();
 const MAX_CACHE_BYTES = 400 * 1024 * 1024;
@@ -122,18 +122,29 @@ export async function analyze(img, signal) {
 
 const CONVERT_MIME = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' };
 
-export async function convert(blob, target, quality = 0.92) {
-  const mime = CONVERT_MIME[target];
-  if (!mime || blob.type === mime) return blob;
+export function resizeActive(s) {
+  return Number(s?.resizeMaxWidth) > 0 || Number(s?.resizeMaxHeight) > 0;
+}
+
+// Converts to `target` ('original' keeps the format) and optionally shrinks to fit
+// maxWidth×maxHeight. With 'original', only JPEG/PNG/WebP are re-encoded; GIF (would
+// lose animation), SVG and other formats pass through unchanged.
+export async function convert(blob, target, quality = 0.92, { maxWidth = 0, maxHeight = 0 } = {}) {
+  const resizing = maxWidth > 0 || maxHeight > 0;
+  const mime = target === 'original' ? Object.values(CONVERT_MIME).find((m) => m === blob.type) : CONVERT_MIME[target];
+  if (!mime || (blob.type === mime && !resizing)) return blob;
   const decoded = await decode(blob);
   try {
-    const c = canvas(decoded.width, decoded.height);
+    const { width, height } = fitWithin(decoded.width, decoded.height, maxWidth, maxHeight);
+    if (blob.type === mime && width === decoded.width && height === decoded.height) return blob;
+    const c = canvas(width, height);
     const ctx = c.getContext('2d');
-    if (target === 'jpeg') {
+    if (mime === 'image/jpeg') {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, decoded.width, decoded.height);
+      ctx.fillRect(0, 0, width, height);
     }
-    ctx.drawImage(decoded.el, 0, 0, decoded.width, decoded.height);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(decoded.el, 0, 0, width, height);
     if (c.convertToBlob) return await c.convertToBlob({ type: mime, quality });
     return await new Promise((resolve, reject) =>
       c.toBlob((b) => (b ? resolve(b) : reject(new Error('Conversion failed'))), mime, quality),

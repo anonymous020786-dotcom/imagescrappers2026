@@ -198,6 +198,14 @@ export function matchesAny(url, patterns) {
   });
 }
 
+// Scales width×height down (never up) to fit inside maxWidth×maxHeight, keeping
+// the aspect ratio. A limit of 0 means "no limit" on that side.
+export function fitWithin(width, height, maxWidth = 0, maxHeight = 0) {
+  if (!width || !height) return { width, height };
+  const scale = Math.min(1, maxWidth > 0 ? maxWidth / width : 1, maxHeight > 0 ? maxHeight / height : 1);
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
 export function aspectOf(img) {
   if (!img.width || !img.height) return 'unknown';
   const r = img.width / img.height;

@@ -92,7 +92,7 @@
     const o = {
       scanImgTags: true, scanSrcset: true, scanBackgrounds: true, scanPseudo: true, scanSvg: true,
       scanCanvas: true, scanVideoPosters: true, scanLinks: true, scanMeta: true, scanLazyAttrs: true,
-      scanShadowDom: true, scanDataUris: true, preferHighestResolution: true, usePicked: false,
+      scanShadowDom: true, scanDataUris: true, scanResources: true, preferHighestResolution: true, usePicked: false,
       ...opts,
     };
     walk.shadow = o.scanShadowDom;
@@ -101,6 +101,16 @@
     elementsByUrl.clear();
     const results = [];
     const seen = new Set();
+    // Every srcset candidate on the page, so the network pass doesn't re-add the
+    // lower-resolution variant the browser happened to load.
+    const srcsetVariants = new Set();
+    const noteVariants = (candidates) => {
+      for (const c of candidates) {
+        const u = absolute(c.url);
+        if (u) srcsetVariants.add(u);
+      }
+      return candidates;
+    };
     let order = 0;
 
     function add(rawUrl, source, el, extra = {}) {
@@ -142,7 +152,8 @@
           width: el.naturalWidth, height: el.naturalHeight, alt: el.alt, title: el.title,
           displayWidth: Math.round(rect.width), displayHeight: Math.round(rect.height),
         };
-        const candidates = o.scanSrcset ? parseSrcset(el.getAttribute('srcset')) : [];
+        const candidates = noteVariants(parseSrcset(el.getAttribute('srcset')));
+        if (!o.scanSrcset) candidates.length = 0;
         if (o.preferHighestResolution && candidates.length) {
           const best = candidates[0];
           const current = absolute(el.currentSrc || el.src);
@@ -161,7 +172,7 @@
       }
 
       if (tag === 'SOURCE' && o.scanSrcset && el.parentElement?.tagName === 'PICTURE') {
-        const best = parseSrcset(el.getAttribute('srcset'))[0];
+        const best = noteVariants(parseSrcset(el.getAttribute('srcset')))[0];
         if (best) add(best.url, 'picture', el.parentElement.querySelector('img') ?? el, { width: best.w });
       }
 
@@ -173,7 +184,7 @@
           if (v && (IMAGE_EXT_RE.test(v) || v.startsWith('data:image/') || /^(https?:)?\/\//.test(v))) add(v, 'lazy', el, { alt: el.alt });
         }
         for (const attr of LAZY_SRCSET_ATTRS) {
-          const best = parseSrcset(el.getAttribute(attr))[0];
+          const best = noteVariants(parseSrcset(el.getAttribute(attr)))[0];
           if (best) add(best.url, 'lazy', el, { alt: el.alt, width: best.w });
         }
       }
@@ -249,6 +260,21 @@
           };
           collect(JSON.parse(s.textContent));
         } catch { /* malformed JSON-LD */ }
+      }
+    }
+
+    // Images the page has loaded that the DOM no longer (or never) shows: fetched
+    // by scripts, CSS sprites of removed nodes, carousel slides swapped out, etc.
+    if (o.scanResources && root === document && globalThis.performance?.getEntriesByType) {
+      const found = new Set(results.map((r) => r.url));
+      for (const entry of performance.getEntriesByType('resource')) {
+        const url = entry.name;
+        if (found.has(url) || srcsetVariants.has(url) || !/^https?:/.test(url)) continue;
+        const isImage = entry.contentType ? entry.contentType.startsWith('image/') : IMAGE_EXT_RE.test(url);
+        // Same-origin (or Timing-Allow-Origin) entries report their size: drop beacons.
+        if (!isImage || (entry.encodedBodySize > 0 && entry.encodedBodySize < 100)) continue;
+        found.add(url);
+        add(url, 'network', null);
       }
     }
 
