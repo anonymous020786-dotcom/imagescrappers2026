@@ -143,6 +143,7 @@ try {
   await check('detects favicon', () => assert.ok(has('/img/favicon.png')));
   await check('traverses Shadow DOM', () => assert.ok(has('/img/shadow.png')));
   await check('scans iframes', () => assert.ok(has('/img/iframe.png')));
+  await check('detects script-loaded images via resource timing', () => assert.ok(has('/img/network.png')));
   await check('hides 1x1 tracking pixel', () => assert.ok(!has('/img/pixel.png')));
 
   await check('min width filter', async () => {
@@ -192,6 +193,31 @@ try {
     const meta = await dash.textContent('#lbMeta');
     assert.match(meta, /Dimensions/);
     await dash.keyboard.press('Escape');
+  });
+
+  await check('resize shrinks JPEG/PNG/WebP, keeps GIFs, never upscales', async () => {
+    const r = await dash.evaluate(async () => {
+      const { convert, decode } = await import('/lib/imaging.js');
+      const c = new OffscreenCanvas(400, 200);
+      c.getContext('2d').fillRect(0, 0, 400, 200);
+      const png = await c.convertToBlob({ type: 'image/png' });
+      const dims = async (b) => {
+        const d = await decode(b);
+        URL.revokeObjectURL(d.url);
+        return `${b.type} ${d.width}x${d.height}`;
+      };
+      const gif = new Blob([new Uint8Array([71, 73, 70, 56, 57, 97])], { type: 'image/gif' });
+      return {
+        shrunk: await dims(await convert(png, 'original', 0.9, { maxWidth: 100 })),
+        boxed: await dims(await convert(png, 'jpeg', 0.9, { maxWidth: 300, maxHeight: 50 })),
+        same: (await convert(png, 'original', 0.9, { maxWidth: 1000 })) === png,
+        gif: (await convert(gif, 'original', 0.9, { maxWidth: 10 })) === gif,
+      };
+    });
+    assert.equal(r.shrunk, 'image/png 100x50');
+    assert.equal(r.boxed, 'image/jpeg 100x50');
+    assert.ok(r.same, 'upscaled or re-encoded an image already inside the limit');
+    assert.ok(r.gif, 'GIF was re-encoded');
   });
 
   await check('history saved', async () => {
