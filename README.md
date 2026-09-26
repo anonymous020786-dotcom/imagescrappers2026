@@ -67,79 +67,81 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 21. **Pick area**: click any region of the page to scrape only inside it (↑ selects the parent element)
 22. **Scrape all tabs** in the window at once
 23. URL de-duplication, with an option to ignore `?query` strings
+24. **Network capture**: images the page loaded through scripts or that are no longer in the DOM are found via the Resource Timing API (without re-adding smaller srcset variants)
 
 ### Filtering and sorting
-24. Min and max width/height, plus presets (≥100, ≥300, ≥800, HD)
-25. File-type filter chips with live counts (JPG, PNG, GIF, WebP, SVG, AVIF, BMP, ICO, TIFF)
-26. "Found in" filter by source (img, srcset, CSS, SVG, canvas, meta…)
-27. Shape filter: landscape, portrait or square
-28. File-size filter (KB) after analysis
-29. Domain filter with per-domain counts
-30. Search across URL, alt text and title, with an optional **regular expression** mode
-31. Hides tracking pixels (≤2 px)
-32. **Blocklist** with wildcards or `/regex/` (ad and analytics hosts are blocked by default)
-33. Sort by page order, resolution, width, height, file size, name, type or domain
-34. Remembers your last filters
+25. Min and max width/height, plus presets (≥100, ≥300, ≥800, HD)
+26. File-type filter chips with live counts (JPG, PNG, GIF, WebP, SVG, AVIF, BMP, ICO, TIFF)
+27. "Found in" filter by source (img, srcset, CSS, SVG, canvas, meta…)
+28. Shape filter: landscape, portrait or square
+29. File-size filter (KB) after analysis
+30. Domain filter with per-domain counts
+31. Search across URL, alt text and title, with an optional **regular expression** mode
+32. Hides tracking pixels (≤2 px)
+33. **Blocklist** with wildcards or `/regex/` (ad and analytics hosts are blocked by default)
+34. Sort by page order, resolution, width, height, file size, name, type or domain
+35. Remembers your last filters
 
 ### Analysis
-35. **Analyze** fetches each image for its exact byte size, real MIME type and true dimensions
-36. **Perceptual-hash (dHash) visual duplicate detection**, with adjustable sensitivity
-37. Dominant colour swatch for each image
+36. **Analyze** fetches each image for its exact byte size, real MIME type and true dimensions
+37. **Perceptual-hash (dHash) visual duplicate detection**, with adjustable sensitivity
+38. Dominant colour swatch for each image
 
 ### Browsing and selection
-38. Grid and list views with a thumbnail-size slider
-39. Click to select, **Shift+click for a range**, plus select all, none and invert
-40. Remove images from the results
-41. **Lightbox preview**: wheel/click zoom up to 12×, drag to pan, ←/→ to browse, full metadata panel
-42. **Show on page**: scrolls to the image in the original tab and highlights it
-43. Copy the image itself to the clipboard (as PNG)
-44. Open an image in a new tab
-45. **Reverse image search** with Google Lens, Bing Visual Search, TinEye or Yandex
+39. Grid and list views with a thumbnail-size slider
+40. Click to select, **Shift+click for a range**, plus select all, none and invert
+41. Remove images from the results
+42. **Lightbox preview**: wheel/click zoom up to 12×, drag to pan, ←/→ to browse, full metadata panel
+43. **Show on page**: scrolls to the image in the original tab and highlights it
+44. Copy the image itself to the clipboard (as PNG)
+45. Open an image in a new tab
+46. **Reverse image search** with Google Lens, Bing Visual Search, TinEye or Yandex
 
 ### Downloading and export
-46. Bulk download with a **concurrency limit, progress bar and Cancel**
-47. **Download as ZIP** using a built-in ZIP writer (UTF-8 names, failed URLs listed in `failed-urls.txt`)
-48. **File name and folder templates**: `{name} {index:3} {domain} {pagedomain} {title} {date} {time} {timestamp} {width} {height} {alt} {type} {source}`
-49. **Format conversion** to PNG, JPEG or WebP, with adjustable quality
-50. Choose what happens when a file exists (add a number, overwrite or ask), plus an optional *Save as* dialog
-51. Export the list as **TXT, CSV, JSON or a standalone HTML gallery**
-52. Copy the selected URLs to the clipboard
+47. Bulk download with a **concurrency limit, progress bar and Cancel**
+48. **Download as ZIP** using a built-in ZIP writer (UTF-8 names, failed URLs listed in `failed-urls.txt`)
+49. **File name and folder templates**: `{name} {index:3} {domain} {pagedomain} {title} {date} {time} {timestamp} {width} {height} {alt} {type} {source}`
+50. **Format conversion** to PNG, JPEG or WebP, with adjustable quality
+51. **Resize on download**: shrink to a maximum width and/or height, keeping the aspect ratio (never upscales; GIFs and SVGs are kept unchanged)
+52. Choose what happens when a file exists (add a number, overwrite or ask), plus an optional *Save as* dialog
+53. Export the list as **TXT, CSV, JSON or a standalone HTML gallery**
+54. Copy the selected URLs to the clipboard
 
 ### Bulk scraping and website crawling (any URL, no tab needed)
-53. **Bulk URL scraper**: paste thousands of page or image URLs, or load them from a `.txt`, `.csv`, `.html` or `.json` file
-54. **Website crawler**: follows links from start URLs with a link-depth limit and **no page limit** (0 = unlimited)
-55. Crawl scope: the same website, the same domain including subdomains, or any website
-56. Include and exclude URL patterns (wildcards or `/regex/`) to control which links the crawler follows
-57. **Automatic pagination**: follows `rel="next"` and "Next", "›", "»", "Siguiente", "Suivant", "Weiter", "次へ", "下一页" and "Далее" links
-58. **sitemap.xml support**, including sitemap indexes, gzipped sitemaps and Google image sitemaps
-59. **Respects robots.txt** (Allow/Disallow, wildcards and Crawl-delay), and can be switched off for your own sites
-60. **Fast mode** reads the page HTML directly, handling hundreds of pages per minute
-61. **Full-render mode** opens each page in a background tab so its JavaScript runs, optionally auto-scrolling each page
-62. Finds image URLs inside inline scripts and JSON (for JavaScript-built galleries)
-63. Adjustable concurrency, delay between requests and page timeout
-64. **Pause, resume and stop** at any time, with a live activity log, rate counter and progress bar
-65. **URL pattern generator**: `img[001-500].{jpg,png}`, with numeric ranges, zero padding, steps, letters and alternatives (up to 1,000,000 URLs)
-66. Send the results to the dashboard, or export them as a URL list
-67. Right-click menu items: *Crawl this website for images…* and *Scrape images from linked page*
+55. **Bulk URL scraper**: paste thousands of page or image URLs, or load them from a `.txt`, `.csv`, `.html` or `.json` file
+56. **Website crawler**: follows links from start URLs with a link-depth limit and **no page limit** (0 = unlimited)
+57. Crawl scope: the same website, the same domain including subdomains, or any website
+58. Include and exclude URL patterns (wildcards or `/regex/`) to control which links the crawler follows
+59. **Automatic pagination**: follows `rel="next"` and "Next", "›", "»", "Siguiente", "Suivant", "Weiter", "次へ", "下一页" and "Далее" links
+60. **sitemap.xml support**, including sitemap indexes, gzipped sitemaps and Google image sitemaps
+61. **Respects robots.txt** (Allow/Disallow, wildcards and Crawl-delay), and can be switched off for your own sites
+62. **Fast mode** reads the page HTML directly, handling hundreds of pages per minute
+63. **Full-render mode** opens each page in a background tab so its JavaScript runs, optionally auto-scrolling each page
+64. Finds image URLs inside inline scripts and JSON (for JavaScript-built galleries)
+65. Adjustable concurrency, delay between requests and page timeout
+66. **Pause, resume and stop** at any time, with a live activity log, rate counter and progress bar
+67. **URL pattern generator**: `img[001-500].{jpg,png}`, with numeric ranges, zero padding, steps, letters and alternatives (up to 1,000,000 URLs)
+68. Send the results to the dashboard, or export them as a URL list
+69. Right-click menu items: *Crawl this website for images…* and *Scrape images from linked page*
 
 ### Large-scale downloading
-68. **No scan limits**: the number of elements examined and images collected per page are configurable (0 = unlimited)
-69. **Paged gallery rendering** stays fast with tens of thousands of results
-70. **ZIP files are split into parts** (the size is configurable, 1–3900 MB), so there's no overall size limit and memory use stays bounded
-71. **Automatic retries** with exponential backoff for failed images
-72. **Pause and resume** for downloads and ZIP packing
-73. Rate limiting: a delay between downloads to avoid being blocked
-74. The browser's download completion is tracked, so the parallel-download limit is real
-75. **Skip previously downloaded images** using a persistent download log (up to 500,000 entries, which you can clear)
-76. **Import URLs** into the dashboard by pasting or from a file, replacing or adding to the current results
-77. Unlimited local storage for history and large result sets (`unlimitedStorage`)
+70. **No scan limits**: the number of elements examined and images collected per page are configurable (0 = unlimited)
+71. **Paged gallery rendering** stays fast with tens of thousands of results
+72. **ZIP files are split into parts** (the size is configurable, 1–3900 MB), so there's no overall size limit and memory use stays bounded
+73. **Automatic retries** with exponential backoff for failed images
+74. **Pause and resume** for downloads and ZIP packing
+75. Rate limiting: a delay between downloads to avoid being blocked
+76. The browser's download completion is tracked, so the parallel-download limit is real
+77. **Skip previously downloaded images** using a persistent download log (up to 500,000 entries, which you can clear)
+78. **Import URLs** into the dashboard by pasting or from a file, replacing or adding to the current results
+79. Unlimited local storage for history and large result sets (`unlimitedStorage`)
 
 ### Worldwide web support
-78. **Hotlink-protection bypass**: sends the original page as `Referer` for image requests (via `declarativeNetRequest`)
-79. **Correct text decoding for non-UTF-8 sites**: Shift_JIS, EUC-JP, GBK, EUC-KR, Windows-1251 and other legacy encodings are detected from the BOM, headers and `<meta>`, just as browsers do
-80. Internationalized domain names and Unicode file names (UTF-8 ZIP entries)
-81. Logged-in pages: requests carry your cookies, so galleries behind a login can be scraped
-82. **JPEG XL** and **HEIC/HEIF** detection, alongside JPG, PNG, GIF, WebP, AVIF, SVG, BMP, ICO and TIFF
+80. **Hotlink-protection bypass**: sends the original page as `Referer` for image requests (via `declarativeNetRequest`)
+81. **Correct text decoding for non-UTF-8 sites**: Shift_JIS, EUC-JP, GBK, EUC-KR, Windows-1251 and other legacy encodings are detected from the BOM, headers and `<meta>`, just as browsers do
+82. Internationalized domain names and Unicode file names (UTF-8 ZIP entries)
+83. Logged-in pages: requests carry your cookies, so galleries behind a login can be scraped
+84. **JPEG XL** and **HEIC/HEIF** detection, alongside JPG, PNG, GIF, WebP, AVIF, SVG, BMP, ICO and TIFF
 
 ### Browser integration
 - Right-click menus: download an image with your naming rules, download a linked image, copy an image URL, reverse search, download all images on the page, scrape all tabs

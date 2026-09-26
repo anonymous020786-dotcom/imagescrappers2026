@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = {
   scanLazyAttrs: true,
   scanShadowDom: true,
   scanDataUris: true,
+  scanResources: true,
   allFrames: true,
   autoScroll: false,
   autoScrollMaxSteps: 40,
@@ -38,6 +39,8 @@ export const DEFAULT_SETTINGS = {
   concurrency: 4,
   convertTo: 'original',
   jpegQuality: 0.92,
+  resizeMaxWidth: 0, // 0 = no limit; images are only ever scaled down
+  resizeMaxHeight: 0,
   zipName: '{pagedomain}_{date}_{time}',
   zipPartSizeMB: 1024,
   retries: 2,

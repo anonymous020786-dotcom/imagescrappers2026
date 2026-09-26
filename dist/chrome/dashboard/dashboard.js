@@ -1,7 +1,7 @@
 import { api, isScriptableUrl } from '../lib/browser.js';
 import { applyTheme, loadSettings, saveSettings } from '../lib/settings.js';
 import { callInTab, scanTab, scanTabs } from '../lib/scanner.js';
-import { analyze, convert, copyImageToClipboard, fetchBlob } from '../lib/imaging.js';
+import { analyze, convert, copyImageToClipboard, fetchBlob, resizeActive } from '../lib/imaging.js';
 import { ZipWriter } from '../lib/zip.js';
 import { DownloadLog, createGate, waitForDownload } from '../lib/downloader.js';
 import { applyRefererRules } from '../lib/referer.js';
@@ -15,10 +15,10 @@ import {
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const SOURCES = ['img', 'srcset', 'picture', 'lazy', 'css', 'pseudo', 'svg', 'canvas', 'poster', 'link', 'meta', 'icon', 'script', 'sitemap', 'direct', 'generated', 'imported'];
+const SOURCES = ['img', 'srcset', 'picture', 'lazy', 'css', 'pseudo', 'svg', 'canvas', 'poster', 'link', 'meta', 'icon', 'network', 'script', 'sitemap', 'direct', 'generated', 'imported'];
 const SOURCE_LABELS = {
   img: '<img>', srcset: 'srcset', picture: '<picture>', lazy: 'lazy-load', css: 'CSS bg', pseudo: '::before/after',
-  svg: 'inline SVG', canvas: 'canvas', poster: 'video poster', link: 'linked', meta: 'meta/og', icon: 'favicon',
+  svg: 'inline SVG', canvas: 'canvas', poster: 'video poster', link: 'linked', meta: 'meta/og', icon: 'favicon', network: 'network',
   script: 'in scripts', sitemap: 'sitemap', direct: 'direct URL', generated: 'generated', imported: 'imported',
 };
 const PAGE_SIZE = 400;
@@ -750,17 +750,28 @@ function filenameFor(img, index, now, convertTo) {
   });
 }
 
-// Fetches (with retries) and optionally converts one image.
+// True when downloads must be fetched and re-encoded (format change or resize).
+function needsProcessing(convertTo) {
+  return convertTo !== 'original' || resizeActive(settings);
+}
+
+function processBlob(blob, convertTo) {
+  return convert(blob, convertTo, settings.jpegQuality, {
+    maxWidth: Number(settings.resizeMaxWidth) || 0, maxHeight: Number(settings.resizeMaxHeight) || 0,
+  });
+}
+
+// Fetches (with retries) and optionally converts/resizes one image.
 async function imageBlob(img, convertTo, signal) {
   let blob = await withRetry(() => fetchBlob(img, signal), settings.retries + 1, 1000, signal);
-  if (convertTo !== 'original') blob = await convert(blob, convertTo, settings.jpegQuality);
+  if (needsProcessing(convertTo)) blob = await processBlob(blob, convertTo);
   return blob;
 }
 
 function useFetchPath(img, convertTo) {
   // Browser-managed downloads can't carry a Referer, so route those through
   // fetch (which the Referer rules apply to) when the option is on.
-  return convertTo !== 'original' || /^(data|blob):/.test(img.url) || !api.downloads?.download ||
+  return needsProcessing(convertTo) || /^(data|blob):/.test(img.url) || !api.downloads?.download ||
     Boolean(settings.sendReferer && img.pageUrl && access.granted);
 }
 
@@ -886,8 +897,8 @@ async function downloadZip() {
 }
 
 $('download').onclick = async () => {
-  // Plain downloads are handled by the browser; only converting needs to fetch the images first.
-  if ($('convertTo').value !== 'original' && !(await needAllSites())) return;
+  // Plain downloads are handled by the browser; only converting or resizing needs to fetch the images first.
+  if (needsProcessing($('convertTo').value) && !(await needAllSites())) return;
   await downloadSelected();
 };
 $('downloadZip').onclick = async () => {
@@ -1038,13 +1049,13 @@ $('lbSelect').onclick = () => {
   $('lbSelect').textContent = lbImage()?.selected ? 'Deselect' : 'Select';
 };
 $('lbDownload').onclick = async () => {
-  if ($('convertTo').value !== 'original' && !(await needAllSites())) return;
+  if (needsProcessing($('convertTo').value) && !(await needAllSites())) return;
   const img = lbImage();
   const filename = filenameFor(img, state.lightboxIndex, new Date(), $('convertTo').value);
   try {
-    if ($('convertTo').value !== 'original' || /^(data|blob):/.test(img.url)) {
+    if (needsProcessing($('convertTo').value) || /^(data|blob):/.test(img.url)) {
       let blob = await fetchBlob(img);
-      blob = await convert(blob, $('convertTo').value, settings.jpegQuality);
+      blob = await processBlob(blob, $('convertTo').value);
       await saveBlob(blob, filename);
     } else await saveFile(img.url, filename, settings.saveAs);
     toast('Download started');

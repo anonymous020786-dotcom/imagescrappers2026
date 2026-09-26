@@ -30,6 +30,8 @@
     c.fillStyle = 'blue'; c.fillRect(0, 0, 30, 30);
     const root = document.getElementById('host').attachShadow({ mode: 'open' });
     root.innerHTML = '<img src="/img/shadow.png" alt="Shadow">';
+    // Loaded by script but never put in the DOM: only resource timing sees it.
+    new Image().src = '/img/network.png';
   </script>
 </body>
 </html>

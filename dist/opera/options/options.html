@@ -43,6 +43,7 @@
           <label><input type="checkbox" name="scanMeta"> Open Graph, Twitter, JSON-LD and favicons</label>
           <label><input type="checkbox" name="scanShadowDom"> Inside Shadow DOM (web components)</label>
           <label><input type="checkbox" name="scanDataUris"> Inline data: URI images</label>
+          <label><input type="checkbox" name="scanResources"> Images the page loaded but doesn't show (network)</label>
           <label><input type="checkbox" name="allFrames"> Inside iframes</label>
           <label><input type="checkbox" name="ignoreQueryForDedupe"> Treat URLs that differ only in ?query as duplicates</label>
         </div>
@@ -105,7 +106,10 @@
             </select>
           </label>
           <label>JPEG / WebP quality <input type="number" name="jpegQuality" min="0.1" max="1" step="0.01"></label>
+          <label>Resize: max width (px, 0 = off) <input type="number" name="resizeMaxWidth" min="0" max="20000" step="1"></label>
+          <label>Resize: max height (px, 0 = off) <input type="number" name="resizeMaxHeight" min="0" max="20000" step="1"></label>
         </div>
+        <p class="muted small">Resizing only shrinks images, keeps their shape, and applies to downloads and ZIPs. With "Keep original format", only JPEG, PNG and WebP are resized; GIFs and SVGs are saved unchanged.</p>
         <label class="row"><input type="checkbox" name="saveAs"> Show the "Save as" dialog for single downloads</label>
       </fieldset>
 

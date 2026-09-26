@@ -169,3 +169,14 @@ test('safeImageSrc only allows image-safe schemes', async () => {
   assert.equal(safeImageSrc('not a url'), null);
   assert.equal(safeImageSrc(undefined), null);
 });
+
+test('fitWithin only scales down and keeps the aspect ratio', async () => {
+  const { fitWithin } = await import('../src/lib/utils.js');
+  assert.deepEqual(fitWithin(4000, 3000, 1000, 0), { width: 1000, height: 750 });
+  assert.deepEqual(fitWithin(4000, 3000, 0, 600), { width: 800, height: 600 });
+  assert.deepEqual(fitWithin(4000, 3000, 1000, 500), { width: 667, height: 500 });
+  assert.deepEqual(fitWithin(800, 600, 1920, 1080), { width: 800, height: 600 }, 'never upscales');
+  assert.deepEqual(fitWithin(800, 600, 0, 0), { width: 800, height: 600 }, '0 means no limit');
+  assert.deepEqual(fitWithin(10000, 1, 100, 0), { width: 100, height: 1 }, 'never collapses to 0 px');
+  assert.deepEqual(fitWithin(0, 0, 100, 100), { width: 0, height: 0 });
+});
