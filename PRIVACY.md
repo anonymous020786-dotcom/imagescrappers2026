@@ -1,6 +1,6 @@
 # Privacy Policy: Image Scraper Pro
 
-_Last updated: 25 September 2026 (version 1.2.0: access to all sites became optional)_
+_Last updated: 13 October 2026 (version 1.4.0: collections, PDF and contact sheet export, colour palettes)_
 
 Image Scraper Pro is a browser extension that finds and downloads images from web pages you choose. It is built to
 work entirely inside your browser.
@@ -21,9 +21,18 @@ The extension saves the following in your browser's own extension storage, only 
 | Your settings (filters, file-name template, download options) | `chrome.storage.sync` | So your preferences are kept. If you use Chrome Sync, your browser syncs them to your own Google account, as it does for any extension settings. The developer cannot access them. |
 | Scan history (page URL, title, and the image URLs found) | `chrome.storage.local` | Powers the History view. You can clear it there at any time and limit its size in the options. |
 | A list of image URLs you already downloaded | `chrome.storage.local` | Powers the optional "skip images I already downloaded" feature. |
+| Your collections (names, and the image and page URLs you saved to them) | `chrome.storage.local` | Powers Collections. Rename or delete them in the dashboard at any time. |
 | Results of a bulk scrape or crawl in progress | `chrome.storage.local` | Hands the results from the crawler to the dashboard. |
 
 Removing the extension deletes all of this.
+
+## Images you edit, inspect or audit
+
+The image editor (crop, rotate, flip, resize), **Photo info** (camera, date and GPS location stored in a photo),
+**Remove metadata**, the **image audit**, **colour palettes**, and **PDF and contact sheet** creation all work on
+your device. The images and anything read from them,
+including a photo's location, are not stored, logged or sent anywhere. Removing metadata only changes the copy you
+download; the original on the website is untouched.
 
 ## Network requests
 
@@ -42,7 +51,7 @@ The extension only contacts websites **you** ask it to:
 Each browser permission is used only for the extension's single purpose, finding and downloading images:
 reading pages you scan (`activeTab`, `scripting`), saving files (`downloads`), right-click menu items
 (`contextMenus`), storing settings and history (`storage`, `unlimitedStorage`), scanning several tabs and naming
-files after the page (`tabs`), copying image URLs (`clipboardWrite`), and loading hotlink-protected images
+files after the page (`tabs`), copying image URLs (`clipboardWrite`), showing the scraper in the side panel (`sidePanel`, Chrome and Edge), and loading hotlink-protected images
 (`declarativeNetRequestWithHostAccess`).
 
 In Chrome and other Chromium browsers, access to all sites is **optional**. The extension asks for it only when you

@@ -1,7 +1,18 @@
 import { api, isScriptableUrl } from '../lib/browser.js';
 import { applyTheme, loadSettings, saveSettings } from '../lib/settings.js';
 import { callInTab, scanTab, scanTabs } from '../lib/scanner.js';
-import { analyze, convert, copyImageToClipboard, fetchBlob, resizeActive } from '../lib/imaging.js';
+import {
+  analyze, convert, copyImageToClipboard, fetchBlob, paletteOf, pdfImage, removeMetadata, renderContactSheet, resizeActive,
+} from '../lib/imaging.js';
+import { buildPdf } from '../lib/pdf.js';
+import { sheetLayout } from '../lib/sheet.js';
+import { paletteToCSS, textColorFor } from '../lib/palette.js';
+import {
+  addImages, createCollection, deleteCollection, loadCollections, removeImages, renameCollection, saveCollections, sortCollections,
+} from '../lib/collections.js';
+import { readMetadata } from '../lib/exif.js';
+import { RULES, auditImages, auditToCSV } from '../lib/audit.js';
+import { openEditor } from './editor.js';
 import { ZipWriter } from '../lib/zip.js';
 import { DownloadLog, createGate, waitForDownload } from '../lib/downloader.js';
 import { applyRefererRules } from '../lib/referer.js';
@@ -28,6 +39,8 @@ const FILTER_STORE = 'dashboard-filters';
 let settings = await loadSettings();
 applyTheme(settings.theme);
 await refreshAccess();
+
+const panel = params.has('panel'); // running in the browser's side panel / sidebar
 
 const state = {
   mode: params.get('mode') || 'tab',
@@ -343,7 +356,7 @@ async function render() {
 
   const empty = $('empty');
   if (!state.images.length) {
-    empty.textContent = state.mode === 'history' ? 'Choose a scrape from History.' : 'No images found on this page yet. Try Auto-scroll or Rescan.';
+    empty.textContent = state.mode === 'history' ? 'Choose a scrape from History.' : state.mode === 'collection' ? 'This collection is empty. Select images on any page and click ★ Save.' : 'No images found on this page yet. Try Auto-scroll or Rescan.';
     empty.classList.remove('hidden');
   } else if (!state.view.length) {
     empty.textContent = 'No images match your filters.';
@@ -399,7 +412,7 @@ function updateStats() {
   $('selInfo').textContent = sel.length
     ? `${sel.length.toLocaleString()} selected${known.length ? ` · ${formatBytes(bytes)}${known.length < sel.length ? '+' : ''}` : ''}`
     : 'Nothing selected: click images to select, Shift+click for a range';
-  for (const id of ['download', 'downloadZip', 'copyUrls', 'removeSel']) $(id).disabled = !sel.length;
+  for (const id of ['download', 'downloadZip', 'copyUrls', 'removeSel', 'saveBtn']) $(id).disabled = !sel.length;
 }
 
 function refreshCard(index) {
@@ -450,11 +463,15 @@ $('gallery').addEventListener('dblclick', (e) => {
 $('selAll').onclick = () => setAll(() => true);
 $('selNone').onclick = () => setAll(() => false);
 $('selInvert').onclick = () => setAll((i) => !i.selected);
-$('removeSel').onclick = () => {
-  const n = selected().length;
+$('removeSel').onclick = async () => {
+  const gone = selected();
   state.images = state.images.filter((i) => !i.selected);
   render();
-  toast(`Removed ${n} images from the results`);
+  if (state.mode === 'collection') {
+    await saveCollections(removeImages(await loadCollections(), state.collectionId, gone.map((i) => i.url)));
+    return toast(`Removed ${gone.length} images from the collection`);
+  }
+  toast(`Removed ${gone.length} images from the results`);
 };
 
 // ---------------------------------------------------------------- scanning
@@ -471,6 +488,7 @@ function mergeImages(fresh) {
       bytes: old.bytes,
       hash: old.hash,
       color: old.color,
+      webpBytes: old.webpBytes,
       duplicateOf: old.duplicateOf,
       type: old.bytes != null ? old.type : img.type,
       width: Math.max(img.width || 0, old.width || 0),
@@ -490,6 +508,8 @@ function setSource(text) {
 async function resolveTargetTab() {
   const id = Number(params.get('tabId'));
   if (id) return api.tabs.get(id);
+  // Side panel: the tab currently shown next to it.
+  if (panel) return (await api.tabs.query({ active: true, currentWindow: true }))[0] ?? null;
   // Opened directly: use the most recently used web tab of this window.
   const tabs = await api.tabs.query({ currentWindow: true });
   return tabs
@@ -499,7 +519,7 @@ async function resolveTargetTab() {
 
 async function scan({ autoScroll = false, usePicked = false, quiet = false } = {}) {
   if (state.mode === 'alltabs') return scanAllTabs();
-  if (state.mode === 'history' || state.mode === 'import') return;
+  if (state.mode === 'history' || state.mode === 'import' || state.mode === 'collection') return;
   if (!state.tab) {
     setSource('No web page to scan');
     render();
@@ -582,6 +602,44 @@ $('live').onclick = async () => {
 window.addEventListener('pagehide', () => {
   if (state.live && state.tab) callInTab(state.tab.id, 'watch', [false], settings.allFrames).catch(() => {});
 });
+
+// -------------------------------------------------------------- side panel
+
+// The side panel stays open while the user browses: follow the active tab of its window and rescan.
+async function followTab(tab) {
+  if (!tab) return;
+  if (state.live && state.tab) callInTab(state.tab.id, 'watch', [false], settings.allFrames).catch(() => {});
+  state.live = false;
+  $('live').classList.remove('active');
+  state.abort?.abort();
+  if (!$('lightbox').classList.contains('hidden')) closeLightbox();
+  for (const d of document.querySelectorAll('dialog[open]')) d.close();
+  state.mode = 'tab';
+  state.tab = tab;
+  state.images = [];
+  state.lastClicked = -1;
+  state.historyId = null;
+  if (!isScriptableUrl(tab.url)) {
+    setSource('This page cannot be scanned');
+    render();
+    return;
+  }
+  setSource(tab.title || tab.url);
+  await scan();
+}
+
+async function setupPanel() {
+  document.body.classList.add('panel');
+  const win = await api.windows.getCurrent().catch(() => null);
+  api.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
+    if (win && windowId !== win.id) return;
+    if (tabId !== state.tab?.id) followTab(await api.tabs.get(tabId).catch(() => null));
+  });
+  // The shown tab navigated to another page.
+  api.tabs.onUpdated.addListener((tabId, info, tab) => {
+    if (tabId === state.tab?.id && info.status === 'complete' && tab.url !== state.tab.url) followTab(tab);
+  });
+}
 
 // ------------------------------------------------------------------ import
 
@@ -761,17 +819,28 @@ function processBlob(blob, convertTo) {
   });
 }
 
+// True when downloads must go through fetch: re-encoding, or removing metadata.
+function needsFetch(convertTo) {
+  return needsProcessing(convertTo) || Boolean(settings.stripMetadata);
+}
+
+// Optional final step for every saved file: drop EXIF/GPS, XMP and comments (on the device).
+async function finishBlob(blob) {
+  if (!settings.stripMetadata) return blob;
+  return (await removeMetadata(blob, settings.jpegQuality)).blob;
+}
+
 // Fetches (with retries) and optionally converts/resizes one image.
 async function imageBlob(img, convertTo, signal) {
   let blob = await withRetry(() => fetchBlob(img, signal), settings.retries + 1, 1000, signal);
   if (needsProcessing(convertTo)) blob = await processBlob(blob, convertTo);
-  return blob;
+  return finishBlob(blob);
 }
 
 function useFetchPath(img, convertTo) {
   // Browser-managed downloads can't carry a Referer, so route those through
   // fetch (which the Referer rules apply to) when the option is on.
-  return needsProcessing(convertTo) || /^(data|blob):/.test(img.url) || !api.downloads?.download ||
+  return needsFetch(convertTo) || /^(data|blob):/.test(img.url) || !api.downloads?.download ||
     Boolean(settings.sendReferer && img.pageUrl && access.granted);
 }
 
@@ -897,8 +966,8 @@ async function downloadZip() {
 }
 
 $('download').onclick = async () => {
-  // Plain downloads are handled by the browser; only converting or resizing needs to fetch the images first.
-  if (needsProcessing($('convertTo').value) && !(await needAllSites())) return;
+  // Plain downloads are handled by the browser; converting, resizing or removing metadata fetches the images first.
+  if (needsFetch($('convertTo').value) && !(await needAllSites())) return;
   await downloadSelected();
 };
 $('downloadZip').onclick = async () => {
@@ -916,11 +985,19 @@ $('exportBtn').onclick = (e) => {
   e.stopPropagation();
   $('exportMenu').classList.toggle('hidden');
 };
-document.addEventListener('click', () => $('exportMenu').classList.add('hidden'));
-$('exportMenu').onclick = (e) => {
+document.addEventListener('click', () => {
+  $('exportMenu').classList.add('hidden');
+  $('saveMenu').classList.add('hidden');
+});
+$('exportMenu').onclick = async (e) => {
   const fmt = e.target.dataset.export;
   if (!fmt) return;
   const list = targetForAction().length ? targetForAction() : state.view;
+  if (fmt === 'pdf') return openPdfDialog(list);
+  if (fmt === 'sheet') {
+    if (!(await needAllSites())) return;
+    return createContactSheet(list);
+  }
   const title = state.tab?.title || 'images';
   const out = {
     txt: [toText(list), 'text/plain'],
@@ -928,6 +1005,7 @@ $('exportMenu').onclick = (e) => {
     json: [toJSON(list), 'application/json'],
     html: [toHTMLGallery(list, `Images from ${title}`), 'text/html'],
   }[fmt];
+  if (!out) return;
   const name = applyTemplate('{pagedomain}_{date}_images', { url: '', pageUrl: state.tab?.url ?? list[0]?.pageUrl });
   saveBlob(new Blob([out[0]], { type: out[1] }), `${name}.${fmt}`);
   toast(`Exported ${list.length} images as ${fmt.toUpperCase()}`);
@@ -991,6 +1069,10 @@ function openLightbox(index) {
   }
   $('lbSelect').textContent = img.selected ? 'Deselect' : 'Select';
   $('lbHighlight').disabled = img.tabId == null;
+  for (const id of ['lbExif', 'lbPalette']) {
+    $(id).classList.add('hidden');
+    $(id).replaceChildren();
+  }
   $('lightbox').classList.remove('hidden');
 }
 
@@ -1049,13 +1131,13 @@ $('lbSelect').onclick = () => {
   $('lbSelect').textContent = lbImage()?.selected ? 'Deselect' : 'Select';
 };
 $('lbDownload').onclick = async () => {
-  if (needsProcessing($('convertTo').value) && !(await needAllSites())) return;
+  if (needsFetch($('convertTo').value) && !(await needAllSites())) return;
   const img = lbImage();
   const filename = filenameFor(img, state.lightboxIndex, new Date(), $('convertTo').value);
   try {
-    if (needsProcessing($('convertTo').value) || /^(data|blob):/.test(img.url)) {
+    if (needsFetch($('convertTo').value) || /^(data|blob):/.test(img.url)) {
       let blob = await fetchBlob(img);
-      blob = await processBlob(blob, $('convertTo').value);
+      blob = await finishBlob(await processBlob(blob, $('convertTo').value));
       await saveBlob(blob, filename);
     } else await saveFile(img.url, filename, settings.saveAs);
     toast('Download started');
@@ -1099,6 +1181,450 @@ $('lbSearch').onclick = () => {
   const img = lbImage();
   if (img.url.startsWith('data:')) return toast('Inline images cannot be reverse searched by URL');
   api.tabs.create({ url: reverseSearchUrl($('lbSearchEngine').value, img.url) });
+};
+
+// ------------------------------------------------------------ photo info
+
+const EXIF_ROWS = [
+  ['Camera', (e) => [e.make, e.model].filter(Boolean).join(' ')],
+  ['Lens', (e) => e.lensModel],
+  ['Taken', (e) => e.dateTimeOriginal || e.dateTime],
+  ['Exposure', (e) => [e.exposureTime, e.fNumber, e.iso ? `ISO ${e.iso}` : '', e.focalLength].filter(Boolean).join(' · ')],
+  ['Software', (e) => e.software],
+  ['Artist', (e) => e.artist],
+  ['Copyright', (e) => e.copyright],
+];
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function showPhotoInfo(meta) {
+  const box = $('lbExif');
+  box.replaceChildren(el('h4', '', 'Photo info'));
+  if (!meta) {
+    box.append(el('p', 'muted', 'Metadata can be read from JPEG, PNG and WebP files only.'));
+  } else {
+    const e = meta.exif ?? {};
+    const dl = el('dl');
+    for (const [label, get] of EXIF_ROWS) {
+      const value = get(e);
+      if (value) dl.append(el('dt', '', label), el('dd', '', String(value)));
+    }
+    if (e.gps) dl.append(el('dt', '', 'Location'), el('dd', '', `${e.gps.lat}, ${e.gps.lon}`));
+    if (dl.childElementCount) box.append(dl);
+    if (e.gps) {
+      box.append(el('p', 'warn', 'This photo contains the GPS location where it was taken. Tick "Remove metadata" before downloading to save it without.'));
+    }
+    const extras = [meta.hasXmp && 'XMP', meta.hasText && 'text notes'].filter(Boolean);
+    if (!dl.childElementCount && !e.gps) box.append(el('p', 'muted', extras.length ? '' : 'No camera or location metadata in this file.'));
+    if (meta.metadataBytes) {
+      box.append(el('p', 'muted small', `Metadata: ${formatBytes(meta.metadataBytes)}${extras.length ? ` (includes ${extras.join(' and ')})` : ''}.`));
+    }
+  }
+  box.classList.remove('hidden');
+}
+
+$('lbInfo').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  try {
+    const blob = await fetchBlob(img);
+    if (lbImage() !== img) return;
+    showPhotoInfo(readMetadata(await blob.arrayBuffer()));
+  } catch (err) {
+    toast(`Could not read the file: ${err.message}`);
+  }
+};
+
+// ----------------------------------------------------------------- editor
+
+$('lbEdit').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  const index = state.lightboxIndex;
+  try {
+    const blob = await fetchBlob(img);
+    await openEditor(blob, {
+      quality: settings.jpegQuality,
+      toast,
+      save: async (out, ext) => {
+        const name = filenameFor({ ...img, type: ext }, index, new Date(), 'original').replace(/(\.[^./]+)?$/, `-edited.${ext}`);
+        await saveBlob(out, name);
+        toast('Download started');
+      },
+      copy: async (out) => {
+        await copyImageToClipboard(out);
+        toast('Edited image copied to clipboard');
+      },
+    });
+  } catch (err) {
+    toast(`Could not open the editor: ${err.message}`);
+  }
+};
+
+// ------------------------------------------------------------------ audit
+
+let auditReport = null;
+let auditRule = '';
+
+function auditTargets() {
+  return state.images.filter((i) => i.pageUrl || i.tabId != null);
+}
+
+function renderAudit() {
+  const report = (auditReport = auditImages(auditTargets()));
+  const saving = report.savingBytes ? ` · about ${formatBytes(report.savingBytes)} could be saved` : '';
+  $('auditSummary').textContent = report.total
+    ? `${report.withIssues.toLocaleString()} of ${report.total.toLocaleString()} images have findings${saving}.`
+    : 'No images to check. Scan a page first.';
+  const chips = $('auditRules');
+  chips.replaceChildren();
+  const ruleIds = Object.keys(RULES).filter((id) => report.byRule[id]?.count);
+  if (auditRule && !ruleIds.includes(auditRule)) auditRule = '';
+  for (const id of ['', ...ruleIds]) {
+    const chip = el('button', `chip${id === auditRule ? ' on' : ''}${id && RULES[id].severity === 'error' ? ' error' : ''}`);
+    chip.append(id ? RULES[id].label : 'All findings', el('span', 'n', String(id ? report.byRule[id].count : report.withIssues)));
+    chip.onclick = () => {
+      auditRule = id;
+      renderAudit();
+    };
+    chips.append(chip);
+  }
+  const list = $('auditList');
+  list.replaceChildren();
+  const items = report.items.filter((it) => !auditRule || it.issues.some((x) => x.rule === auditRule));
+  for (const { img, issues } of items.slice(0, 500)) {
+    const row = el('div', 'audit-item');
+    const thumb = el('img', 'checker');
+    thumb.src = safeImageSrc(img.url) ?? '';
+    thumb.alt = '';
+    thumb.loading = 'lazy';
+    thumb.onerror = () => (thumb.style.visibility = 'hidden');
+    const body = el('div', 'body');
+    body.append(el('span', 'url', img.url.length > 300 ? `${img.url.slice(0, 300)}…` : img.url));
+    const ul = el('ul');
+    for (const issue of issues) {
+      const li = el('li');
+      li.append(el('span', `sev ${issue.severity}`, issue.severity), `${RULES[issue.rule].label}`);
+      if (issue.detail) li.append(el('span', 'muted', ` — ${issue.detail}`));
+      li.title = RULES[issue.rule].fix;
+      ul.append(li);
+    }
+    body.append(ul);
+    row.append(thumb, body);
+    row.title = 'Open in the preview';
+    row.onclick = () => {
+      const index = state.view.indexOf(img);
+      if (index < 0) return toast('That image is hidden by the current filters');
+      $('auditDialog').close();
+      openLightbox(index);
+    };
+    list.append(row);
+  }
+  if (items.length > 500) list.append(el('p', 'muted small', `…and ${items.length - 500} more (all included in the CSV).`));
+  if (report.total && !items.length) list.append(el('p', 'muted small', 'Nothing to report.'));
+  $('auditCsv').disabled = !report.withIssues;
+}
+
+$('auditBtn').onclick = () => {
+  auditRule = '';
+  renderAudit();
+  $('auditDialog').showModal();
+};
+$('auditClose').onclick = () => $('auditDialog').close();
+$('auditCsv').onclick = () => {
+  if (!auditReport) return;
+  const name = applyTemplate('{pagedomain}_{date}_image-audit', { url: '', pageUrl: state.tab?.url ?? auditReport.items[0]?.img.pageUrl });
+  saveBlob(new Blob([auditToCSV(auditReport)], { type: 'text/csv' }), `${name}.csv`);
+};
+$('auditMeasure').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const todo = auditTargets().filter((i) => ['jpg', 'png', 'bmp'].includes(i.type) && i.webpBytes == null);
+  if (!todo.length) return toast('Nothing left to measure');
+  $('auditMeasure').disabled = true;
+  await ensureReferer();
+  const signal = startTask('Measuring WebP size');
+  let done = 0;
+  await mapLimit(todo, 3, async (img) => {
+    try {
+      const blob = await fetchBlob(img, signal);
+      img.bytes ??= blob.size;
+      img.webpBytes = (await convert(blob, 'webp', settings.jpegQuality)).size;
+    } catch { /* unreachable image: leave it unmeasured */ }
+    progress(++done, todo.length, 'Measuring WebP size');
+    $('auditMeasure').textContent = `Measuring ${done}/${todo.length}…`; // the status bar is behind the dialog
+  }, signal);
+  endTask();
+  $('auditMeasure').textContent = 'Measure WebP savings';
+  $('auditMeasure').disabled = false;
+  renderAudit();
+};
+
+// ------------------------------------------------------- PDF & contact sheet
+
+const MAX_PDF_PAGES = 1000;
+let pdfList = [];
+
+function exportName() {
+  return applyTemplate('{pagedomain}_{date}_images', { url: '', pageUrl: state.tab?.url ?? pdfList[0]?.pageUrl ?? state.view[0]?.pageUrl });
+}
+
+function openPdfDialog(list) {
+  if (!list.length) return toast('No images to export');
+  pdfList = list.slice(0, MAX_PDF_PAGES);
+  const cut = list.length > MAX_PDF_PAGES ? ` (the first ${MAX_PDF_PAGES.toLocaleString()} of ${list.length.toLocaleString()})` : '';
+  const which = targetForAction().length ? 'selected' : 'shown';
+  $('pdfInfo').textContent = `${pdfList.length.toLocaleString()} ${which} image${pdfList.length === 1 ? '' : 's'}${cut}, one per page.`;
+  $('pdfDialog').showModal();
+}
+$('pdfCancel').onclick = () => $('pdfDialog').close();
+$('pdfGo').onclick = async () => {
+  if (!(await needAllSites())) return;
+  $('pdfDialog').close();
+  await createPdf(pdfList, { pageSize: $('pdfPage').value, margin: Number($('pdfMargin').value) || 0 });
+};
+
+async function createPdf(list, { pageSize, margin }) {
+  await ensureReferer();
+  const signal = startTask('Making PDF');
+  const pages = new Array(list.length);
+  let done = 0;
+  let failed = 0;
+  await mapLimit(list, settings.concurrency, async (img, i) => {
+    await state.gate.wait(signal);
+    try {
+      const blob = await withRetry(() => fetchBlob(img, signal), settings.retries + 1, 1000, signal);
+      pages[i] = await pdfImage(blob, settings.jpegQuality);
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      failed++;
+    }
+    progress(++done, list.length, 'Making PDF');
+  }, signal);
+  if (signal.aborted) return;
+  const ok = pages.filter(Boolean);
+  if (!ok.length) {
+    endTask();
+    return toast('None of the images could be loaded, so no PDF was made');
+  }
+  const title = state.tab?.title || list[0]?.pageTitle || 'Images';
+  const pdf = buildPdf(ok, { pageSize, margin, title });
+  await saveBlob(new Blob(pdf.chunks, { type: 'application/pdf' }), `${exportName()}.pdf`);
+  endTask();
+  toast(`PDF saved with ${ok.length.toLocaleString()} pages (${formatBytes(pdf.size)})${failed ? `; ${failed} images could not be loaded` : ''}`, 5000);
+}
+
+async function createContactSheet(list) {
+  if (!list.length) return toast('No images to export');
+  await ensureReferer();
+  const layout = sheetLayout(list.length, { columns: list.length > 40 ? 6 : 5 });
+  const signal = startTask('Making contact sheet');
+  const title = `${state.tab?.title || list[0]?.pageTitle || 'Images'} · ${list.length.toLocaleString()} images`;
+  const name = exportName();
+  let done = 0;
+  for (const [n, sheet] of layout.sheets.entries()) {
+    const entries = [];
+    await mapLimit(sheet.cells, settings.concurrency + 2, async (cell) => {
+      const img = list[cell.index];
+      let blob = null;
+      try {
+        blob = await fetchBlob(img, signal);
+      } catch { /* drawn as an empty box */ }
+      const size = img.width && img.height ? `${img.width}×${img.height}` : '';
+      entries[cell.index] = { blob, label: baseNameFromUrl(img.url) || hostFromUrl(img.url), detail: [size, img.type?.toUpperCase(), formatBytes(img.bytes ?? blob?.size)].filter((x) => x && x !== '—').join(' · ') };
+      progress(++done, list.length, 'Making contact sheet');
+    }, signal);
+    if (signal.aborted) return;
+    const many = layout.sheets.length > 1;
+    const png = await renderContactSheet(layout, sheet, entries, many ? `${title} (${n + 1}/${layout.sheets.length})` : title);
+    await saveBlob(png, `${name}_contact-sheet${many ? `-${n + 1}` : ''}.png`);
+  }
+  endTask();
+  toast(layout.sheets.length > 1 ? `${layout.sheets.length} contact sheets saved` : 'Contact sheet saved');
+}
+
+// ------------------------------------------------------------ collections
+
+function askName(title, value = '') {
+  const dialog = $('nameDialog');
+  $('nameTitle').textContent = title;
+  $('nameInput').value = value;
+  dialog.returnValue = '';
+  dialog.showModal();
+  $('nameInput').select();
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok' ? $('nameInput').value.trim() || null : null), { once: true });
+  });
+}
+
+async function saveTo(id, images) {
+  const r = addImages(await loadCollections(), id, images);
+  await saveCollections(r.collections);
+  const name = r.collections.find((c) => c.id === id)?.name ?? '';
+  storeSet('last-collection', id);
+  const extra = r.skipped ? ` (${r.skipped} already there or too large)` : '';
+  toast(r.added ? `Saved ${r.added} image${r.added === 1 ? '' : 's'} to "${name}"${extra}` : `Nothing new to save to "${name}"${extra}`);
+}
+
+async function saveToNew(images) {
+  const name = await askName('New collection');
+  if (!name) return;
+  const { collections, collection } = createCollection(await loadCollections(), name);
+  await saveCollections(collections);
+  await saveTo(collection.id, images);
+}
+
+// Buttons for "save these images to …": recent collections first, then "New collection…".
+async function collectionChoices(images, after = () => {}) {
+  const list = sortCollections(await loadCollections()).slice(0, 15);
+  const buttons = list.map((c) => {
+    const b = el('button', '', `${c.name} (${c.images.length})`);
+    b.onclick = async () => {
+      after();
+      await saveTo(c.id, images);
+    };
+    return b;
+  });
+  const fresh = el('button', '', '+ New collection…');
+  fresh.onclick = () => {
+    after();
+    saveToNew(images);
+  };
+  return [...buttons, fresh];
+}
+
+$('saveBtn').onclick = async (e) => {
+  e.stopPropagation();
+  const menu = $('saveMenu');
+  if (!menu.classList.contains('hidden')) return menu.classList.add('hidden');
+  const images = targetForAction();
+  if (!images.length) return;
+  const hide = () => menu.classList.add('hidden');
+  menu.replaceChildren(el('div', 'menu-note', `Save ${images.length.toLocaleString()} image${images.length === 1 ? '' : 's'} to:`), ...(await collectionChoices(images, hide)));
+  menu.classList.remove('hidden');
+};
+
+$('lbSave').onclick = async () => {
+  const img = lbImage();
+  const box = $('lbPalette');
+  box.replaceChildren(el('h4', '', 'Save to collection'));
+  const wrap = el('div', 'lb-actions');
+  wrap.append(...(await collectionChoices([img], () => box.classList.add('hidden'))));
+  box.append(wrap);
+  box.classList.remove('hidden');
+};
+
+function openCollection(c) {
+  state.mode = 'collection';
+  state.collectionId = c.id;
+  state.live = false;
+  state.historyId = null;
+  state.images = c.images.map((img, n) => ({
+    source: 'imported', alt: '', width: 0, height: 0, ...img,
+    type: img.type && img.type !== 'other' ? img.type : guessType(img.url),
+    id: `${c.id}-${n}`, order: n, tabId: null,
+  }));
+  setSource(`Collection: ${c.name} · ${c.images.length.toLocaleString()} images`);
+  $('collectionsPanel').classList.add('hidden');
+  render();
+}
+
+async function showCollections() {
+  const list = $('collectionsList');
+  list.replaceChildren();
+  const all = sortCollections(await loadCollections());
+  if (!all.length) list.append(el('p', 'muted', 'No collections yet. Select images and click ★ Save.'));
+  for (const c of all) {
+    const row = el('div', 'hist');
+    const thumb = el('img', 'checker');
+    thumb.alt = '';
+    thumb.src = safeImageSrc(c.images.find((i) => !i.url.startsWith('data:'))?.url) ?? '../icons/icon48.png';
+    thumb.onerror = () => (thumb.src = '../icons/icon48.png');
+    const text = el('div');
+    text.append(el('b', '', c.name), el('span', 'muted small', `${c.images.length.toLocaleString()} images · ${new Date(c.updated).toLocaleDateString()}`));
+    const actions = el('div', 'coll-actions');
+    const rename = el('button', '', 'Rename');
+    rename.onclick = async (e) => {
+      e.stopPropagation();
+      const name = await askName('Rename collection', c.name);
+      if (!name) return;
+      await saveCollections(renameCollection(await loadCollections(), c.id, name));
+      if (state.mode === 'collection' && state.collectionId === c.id) setSource(`Collection: ${name} · ${state.images.length.toLocaleString()} images`);
+      showCollections();
+    };
+    const del = el('button', 'danger', 'Delete');
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete the collection "${c.name}"? The images on the websites are not affected.`)) return;
+      await saveCollections(deleteCollection(await loadCollections(), c.id));
+      showCollections();
+    };
+    actions.append(rename, del);
+    row.append(thumb, text, actions);
+    row.onclick = () => openCollection(c);
+    list.append(row);
+  }
+  $('collectionsPanel').classList.remove('hidden');
+}
+
+$('collectionsBtn').onclick = showCollections;
+$('closeCollections').onclick = () => $('collectionsPanel').classList.add('hidden');
+$('newCollection').onclick = async () => {
+  const name = await askName('New collection');
+  if (!name) return;
+  await saveCollections(createCollection(await loadCollections(), name).collections);
+  showCollections();
+};
+
+// ---------------------------------------------------------------- colours
+
+$('lbColours').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  let colours;
+  try {
+    colours = await paletteOf(await fetchBlob(img), 6);
+  } catch (err) {
+    return toast(`Could not read the image: ${err.message}`);
+  }
+  if (lbImage() !== img) return;
+  const box = $('lbPalette');
+  box.replaceChildren(el('h4', '', 'Colours'));
+  if (!colours.length) {
+    box.append(el('p', 'muted', 'This image is fully transparent.'));
+  } else {
+    const grid = el('div', 'swatches');
+    for (const c of colours) {
+      const b = el('button', 'swatch-btn', c.hex);
+      b.append(el('small', '', `${Math.round(c.share * 100)}%`));
+      b.style.background = c.hex;
+      b.style.color = textColorFor(c.rgb);
+      b.title = `Copy ${c.hex}`;
+      b.onclick = async () => {
+        await navigator.clipboard.writeText(c.hex);
+        toast(`${c.hex} copied`);
+      };
+      grid.append(b);
+    }
+    const css = el('button', '', 'Copy as CSS variables');
+    css.onclick = async () => {
+      await navigator.clipboard.writeText(paletteToCSS(colours));
+      toast('CSS variables copied');
+    };
+    const hexes = el('button', '', 'Copy HEX list');
+    hexes.onclick = async () => {
+      await navigator.clipboard.writeText(colours.map((c) => c.hex).join('\n'));
+      toast('Colours copied');
+    };
+    const row = el('div', 'lb-actions');
+    row.append(css, hexes);
+    box.append(grid, row);
+  }
+  box.classList.remove('hidden');
 };
 
 // -------------------------------------------------------------- view & ui
@@ -1157,12 +1683,14 @@ api.storage.onChanged.addListener(async (changes) => {
     settings = await loadSettings();
     applyTheme(settings.theme);
     applyView();
+    $('stripMeta').checked = !!settings.stripMetadata;
   }
 });
 
 // ------------------------------------------------------------ keyboard
 
 document.addEventListener('keydown', (e) => {
+  if (document.querySelector('dialog[open]')) return; // dialogs handle their own keys (Esc closes them)
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
   const lightbox = !$('lightbox').classList.contains('hidden');
   if (lightbox) {
@@ -1178,6 +1706,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape') {
     if (!$('historyPanel').classList.contains('hidden')) $('historyPanel').classList.add('hidden');
+    else if (!$('collectionsPanel').classList.contains('hidden')) $('collectionsPanel').classList.add('hidden');
     else if (typing) document.activeElement.blur();
     else setAll(() => false);
     return;
@@ -1194,6 +1723,7 @@ document.addEventListener('keydown', (e) => {
     if (selected().length) $('copyUrls').click();
   } else if (!mod && e.key.toLowerCase() === 'd') $('download').click();
   else if (!mod && e.key.toLowerCase() === 'z') $('downloadZip').click();
+  else if (!mod && e.key.toLowerCase() === 's' && selected().length) $('saveBtn').click();
   else if (!mod && e.key.toLowerCase() === 'r') scan();
   else if (e.key === 'Delete' || e.key === 'Backspace') $('removeSel').click();
 });
@@ -1211,11 +1741,23 @@ onAccessChange((granted) => {
 });
 writeFilters({ ...defaultFilters(), ...(storeGet(FILTER_STORE) ?? {}) });
 $('convertTo').value = settings.convertTo;
+$('stripMeta').checked = !!settings.stripMetadata;
+$('stripMeta').onchange = async () => {
+  settings = await saveSettings({ stripMetadata: $('stripMeta').checked });
+};
 if (matchMedia('(max-width: 900px)').matches) $('sidebar').classList.add('collapsed');
+if (panel) await setupPanel();
 
 if (state.mode === 'history') {
   render();
   showHistory();
+} else if (state.mode === 'collection') {
+  const c = (await loadCollections()).find((x) => x.id === params.get('id'));
+  if (c) openCollection(c);
+  else {
+    render();
+    showCollections();
+  }
 } else if (state.mode === 'import') {
   await importFromStorage(params.get('key'));
 } else if (state.mode === 'alltabs') {

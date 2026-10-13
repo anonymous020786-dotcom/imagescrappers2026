@@ -220,6 +220,190 @@ try {
     assert.ok(r.gif, 'GIF was re-encoded');
   });
 
+  await check('image audit lists findings for the page', async () => {
+    await dash.click('#auditBtn');
+    await dash.waitForSelector('#auditDialog[open]');
+    assert.match(await dash.textContent('#auditSummary'), /images have findings/);
+    // The fixture's responsive <img> has no width/height attributes.
+    assert.match(await dash.textContent('#auditRules'), /No width\/height attributes/);
+    assert.ok((await dash.$$('#auditList .audit-item')).length > 0);
+    assert.equal(await dash.isDisabled('#auditCsv'), false);
+    await dash.keyboard.press('Escape');
+    await dash.waitForFunction(() => !document.getElementById('auditDialog').open);
+  });
+
+  await check('reads and removes photo metadata in the browser', async () => {
+    const r = await dash.evaluate(async () => {
+      const { removeMetadata, decode } = await import('/lib/imaging.js');
+      const { readMetadata } = await import('/lib/exif.js');
+      const c = new OffscreenCanvas(40, 20);
+      c.getContext('2d').fillRect(0, 0, 40, 20);
+      const jpg = new Uint8Array(await (await c.convertToBlob({ type: 'image/jpeg' })).arrayBuffer());
+      // Minimal little-endian TIFF: IFD0 with Make = "Cam1".
+      const tiff = [0x49, 0x49, 42, 0, 8, 0, 0, 0, 1, 0, 0x0f, 0x01, 2, 0, 5, 0, 0, 0, 26, 0, 0, 0, 0, 0, 0, 0, 67, 97, 109, 49, 0];
+      const payload = [...'Exif\0\0'].map((ch) => ch.charCodeAt(0)).concat(tiff);
+      const len = payload.length + 2;
+      const withExif = new Uint8Array([0xff, 0xd8, 0xff, 0xe1, len >> 8, len & 255, ...payload, ...jpg.subarray(2)]);
+      const blob = new Blob([withExif], { type: 'image/jpeg' });
+      const before = readMetadata(withExif);
+      const { blob: clean, removed } = await removeMetadata(blob);
+      const after = readMetadata(await clean.arrayBuffer());
+      const d = await decode(clean);
+      URL.revokeObjectURL(d.url);
+      return { make: before.exif?.make, removed, after: after.exif, size: `${d.width}x${d.height}` };
+    });
+    assert.equal(r.make, 'Cam1');
+    assert.ok(r.removed > 0);
+    assert.equal(r.after, null);
+    assert.equal(r.size, '40x20');
+  });
+
+  await check('editor rotates, flips and crops at full resolution', async () => {
+    const r = await dash.evaluate(async () => {
+      const { renderEdited, decode } = await import('/lib/imaging.js');
+      const c = new OffscreenCanvas(40, 20);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#f00';
+      ctx.fillRect(0, 0, 20, 20);
+      ctx.fillStyle = '#00f';
+      ctx.fillRect(20, 0, 20, 20);
+      const src = await c.convertToBlob({ type: 'image/png' });
+      const pixels = async (blob, points) => {
+        const d = await decode(blob);
+        const k = new OffscreenCanvas(d.width, d.height);
+        const kx = k.getContext('2d');
+        kx.drawImage(d.el, 0, 0);
+        URL.revokeObjectURL(d.url);
+        return { size: `${d.width}x${d.height}`, px: points.map(([x, y]) => (kx.getImageData(x, y, 1, 1).data[0] > 128 ? 'red' : 'blue')) };
+      };
+      return {
+        // A clockwise turn puts the left (red) half on top.
+        rotated: await pixels(await renderEdited(src, { rotation: 90 }, 'image/png'), [[10, 5], [10, 35]]),
+        flipped: await pixels(await renderEdited(src, { flipH: true }, 'image/png'), [[5, 10], [35, 10]]),
+        cropped: await pixels(await renderEdited(src, { crop: { x: 0.5, y: 0, w: 0.5, h: 1 } }, 'image/png'), [[5, 5]]),
+        resized: (await pixels(await renderEdited(src, { maxWidth: 10 }, 'image/png'), [])).size,
+      };
+    });
+    assert.deepEqual(r.rotated, { size: '20x40', px: ['red', 'blue'] });
+    assert.deepEqual(r.flipped, { size: '40x20', px: ['blue', 'red'] });
+    assert.deepEqual(r.cropped, { size: '20x20', px: ['blue'] });
+    assert.equal(r.resized, '10x5');
+  });
+
+  await check('lightbox opens the editor; rotating swaps the output size', async () => {
+    await dash.evaluate(async () => {
+      const { openEditor } = await import('/dashboard/editor.js');
+      const c = new OffscreenCanvas(60, 30);
+      c.getContext('2d').fillRect(0, 0, 60, 30);
+      await openEditor(await c.convertToBlob({ type: 'image/png' }), { save() {}, copy() {}, toast() {} });
+    });
+    await dash.waitForSelector('#editDialog[open]');
+    assert.equal(await dash.textContent('#edInfo'), 'Output 60 × 30 px');
+    await dash.click('#edRotR');
+    assert.equal(await dash.textContent('#edInfo'), 'Output 30 × 60 px');
+    await dash.fill('#edWidth', '15');
+    assert.equal(await dash.textContent('#edInfo'), 'Output 15 × 30 px');
+    await dash.click('#edClose');
+    // And from a real result: the lightbox's Edit button fetches the image and opens it.
+    await dash.dblclick('#gallery .card >> nth=0');
+    await dash.click('#lbEdit');
+    await dash.waitForSelector('#editDialog[open]');
+    assert.match(await dash.textContent('#edInfo'), /^Output \d+ × \d+ px$/);
+    await dash.keyboard.press('Escape');
+    await dash.waitForFunction(() => !document.getElementById('editDialog').open);
+    await dash.keyboard.press('Escape');
+  });
+
+  // Waits for a finished download of this MIME type (Playwright stores downloads under random names).
+  const latestDownload = (mime) => worker.evaluate(async (src) => {
+    for (let i = 0; i < 50; i++) {
+      const items = await new Promise((r) => chrome.downloads.search({ orderBy: ['-startTime'] }, r));
+      const hit = items.find((d) => d.mime === src && d.state === 'complete');
+      if (hit) return hit;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    const items = await new Promise((r) => chrome.downloads.search({ orderBy: ['-startTime'], limit: 5 }, r));
+    return { missing: items.map((d) => `${d.mime} ${d.state} ${d.error ?? ''}`) };
+  }, mime);
+
+  await check('PDF export: one page per image, JPEGs embedded as-is', async () => {
+    const r = await dash.evaluate(async () => {
+      const { pdfImage } = await import('/lib/imaging.js');
+      const { buildPdf } = await import('/lib/pdf.js');
+      const c = new OffscreenCanvas(30, 20);
+      c.getContext('2d').fillRect(0, 0, 30, 20);
+      const png = await c.convertToBlob({ type: 'image/png' });
+      const jpg = await c.convertToBlob({ type: 'image/jpeg' });
+      const a = await pdfImage(png);
+      const b = await pdfImage(jpg);
+      const pdf = buildPdf([a, b], { pageSize: 'a4' });
+      return { a: [a.width, a.height, a.components], same: b.bytes.length === jpg.size, size: pdf.size };
+    });
+    assert.deepEqual(r.a, [30, 20, 3]);
+    assert.ok(r.same, 'JPEG was re-encoded');
+    assert.ok(r.size > 0);
+    // Through the UI: Export ▸ PDF ▸ Create PDF saves a .pdf file.
+    await dash.click('#selAll');
+    await dash.click('#exportBtn');
+    await dash.click('[data-export="pdf"]');
+    await dash.waitForSelector('#pdfDialog[open]');
+    assert.match(await dash.textContent('#pdfInfo'), /selected images?/);
+    await dash.selectOption('#pdfPage', 'a4');
+    await dash.click('#pdfGo');
+    await dash.waitForFunction(() => /PDF saved with \d+ pages/.test(document.querySelector('.toast')?.textContent ?? ''), null, { timeout: 30000 });
+    const pdf = await latestDownload('application/pdf');
+    assert.ok(!pdf.missing, `no PDF download: ${JSON.stringify(pdf.missing)}`);
+    const file = readFileSync(pdf.filename).toString('latin1');
+    const selected = await dash.$$eval('#gallery .card.selected', (els) => els.length);
+    assert.ok(file.startsWith('%PDF-1.4') && file.trimEnd().endsWith('%%EOF'));
+    const pages = Number(file.match(/\/Count (\d+)/)[1]);
+    assert.ok(pages >= selected - 4 && pages <= selected, `${pages} pages for ${selected} images`); // inline SVG/canvas may fail
+  });
+
+  await check('contact sheet export saves a PNG grid', async () => {
+    await dash.click('#exportBtn');
+    await dash.click('[data-export="sheet"]');
+    await dash.waitForFunction(() => /Contact sheet saved/.test(document.querySelector('.toast')?.textContent ?? ''), null, { timeout: 30000 });
+    const sheet = await latestDownload('image/png');
+    assert.ok(!sheet.missing, `no contact sheet download: ${JSON.stringify(sheet.missing)}`);
+    const png = readFileSync(sheet.filename);
+    assert.equal(png.readUInt32BE(16), 24 * 2 + 5 * 220 + 4 * 12); // IHDR width: 5 columns
+  });
+
+  await check('colour palette of an image', async () => {
+    await dash.dblclick('#gallery .card >> nth=0');
+    await dash.click('#lbColours');
+    await dash.waitForSelector('#lbPalette .swatch-btn');
+    const hexes = await dash.$$eval('#lbPalette .swatch-btn', (els) => els.map((e) => e.firstChild.textContent));
+    assert.ok(hexes.length >= 2 && hexes.every((h) => /^#[0-9a-f]{6}$/.test(h)), hexes.join(','));
+    await dash.keyboard.press('Escape');
+  });
+
+  await check('collections: save, reopen, remove', async () => {
+    await dash.click('#selNone');
+    await dash.click('#gallery .card >> nth=0');
+    await dash.click('#gallery .card >> nth=1');
+    await dash.click('#saveBtn');
+    await dash.click('#saveMenu >> text=+ New collection…');
+    await dash.fill('#nameInput', 'Favourites');
+    await dash.click('#nameOk');
+    await dash.waitForFunction(() => /Saved 2 images to "Favourites"/.test(document.querySelector('.toast')?.textContent ?? ''));
+    // Saving the same images again adds nothing.
+    await dash.click('#saveBtn');
+    await dash.click('#saveMenu >> text=Favourites (2)');
+    await dash.waitForFunction(() => /Nothing new to save/.test(document.querySelector('.toast')?.textContent ?? ''));
+    await dash.click('#collectionsBtn');
+    await dash.click('#collectionsList .hist >> nth=0');
+    await dash.waitForFunction(() => document.querySelectorAll('#gallery .card').length === 2);
+    assert.match(await dash.textContent('#sourceInfo'), /Collection: Favourites · 2 images/);
+    await dash.click('#gallery .card >> nth=0');
+    await dash.click('#removeSel');
+    await dash.waitForFunction(() => /from the collection/.test(document.querySelector('.toast')?.textContent ?? ''));
+    const stored = await worker.evaluate(async () => (await chrome.storage.local.get('collections')).collections);
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].images.length, 1);
+  });
+
   await check('history saved', async () => {
     const h = await worker.evaluate(async () => (await chrome.storage.local.get('history')).history);
     assert.ok(h?.length >= 1 && h[0].count > 5);
@@ -335,6 +519,22 @@ try {
     assert.equal(await statNum(p, 'sImages'), 50);
   });
 
+  await check('side panel follows the active tab', async () => {
+    const side = await context.newPage();
+    await side.goto(`chrome-extension://${extId}/sidepanel/sidepanel.html`);
+    await side.waitForURL(/dashboard\.html\?panel=1/);
+    await side.waitForSelector('body.panel');
+    // In tests the panel is itself a tab; switching to the fixture page must make it scan that page.
+    await page.bringToFront();
+    await side.waitForFunction(() => document.querySelectorAll('#gallery .card').length > 0, null, { timeout: 15000 });
+    assert.match(await side.textContent('#sourceInfo'), /Scraper fixture/);
+    await page.goto(`${base}/frame.html`);
+    await side.waitForFunction(() => !/Scraper fixture/.test(document.getElementById('sourceInfo').textContent), null, { timeout: 15000 });
+    await page.goto(`${base}/`);
+    await page.waitForLoadState('load');
+    await side.close();
+  });
+
   await check('popup renders counts', async () => {
     await page.bringToFront();
     const popup = await context.newPage();
@@ -342,6 +542,7 @@ try {
     await popup.waitForTimeout(1500);
     const text = await popup.textContent('#count');
     assert.ok(text !== '–', `count was ${text}`);
+    assert.equal(await popup.isVisible('#panel'), true, 'side panel button hidden');
   });
 
   await check('options page saves settings', async () => {

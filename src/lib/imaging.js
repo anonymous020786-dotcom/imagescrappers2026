@@ -1,6 +1,11 @@
 // Browser-only image helpers used by extension pages (dashboard).
 import { callInTab } from './scanner.js';
 import { dHashFromGray, fitWithin, typeFromMime } from './utils.js';
+import { orientTransform, outputGeometry } from './editgeom.js';
+import { detectFormat, readMetadata, stripMetadata } from './exif.js';
+import { jpegInfo } from './pdf.js';
+import { extractPalette } from './palette.js';
+import { fitInCell } from './sheet.js';
 
 const blobCache = new Map();
 const MAX_CACHE_BYTES = 400 * 1024 * 1024;
@@ -152,6 +157,153 @@ export async function convert(blob, target, quality = 0.92, { maxWidth = 0, maxH
   } finally {
     URL.revokeObjectURL(decoded.url);
   }
+}
+
+function encode(c, mime, quality) {
+  if (c.convertToBlob) return c.convertToBlob({ type: mime, quality });
+  return new Promise((resolve, reject) =>
+    c.toBlob((b) => (b ? resolve(b) : reject(new Error('Conversion failed'))), mime, quality),
+  );
+}
+
+const FORMAT_MIME = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+
+// Removes EXIF (camera, GPS location, dates), XMP, comments and text chunks from JPEG, PNG and WebP.
+// Lossless when possible; a rotated JPEG is re-encoded upright so it doesn't lose its orientation.
+// Other formats are returned unchanged. Everything happens locally.
+export async function removeMetadata(blob, quality = 0.92) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const format = detectFormat(bytes);
+  if (!format) return { blob, removed: 0 };
+  const mime = FORMAT_MIME[format];
+  const res = stripMetadata(bytes);
+  if (res.needsReencode) {
+    // Browsers apply EXIF orientation when decoding, so drawing the image gives the upright pixels.
+    const decoded = await decode(blob);
+    try {
+      const c = canvas(decoded.width, decoded.height);
+      c.getContext('2d').drawImage(decoded.el, 0, 0);
+      const out = await encode(c, mime, quality);
+      return { blob: out, removed: Math.max(0, bytes.length - out.size), reencoded: true };
+    } finally {
+      URL.revokeObjectURL(decoded.url);
+    }
+  }
+  if (!res.removed) return { blob, removed: 0 };
+  return { blob: new Blob([res.bytes], { type: mime }), removed: res.removed };
+}
+
+// Applies editor settings: rotation (0/90/180/270), flips, crop (fractions of the rotated image),
+// optional max width, then encodes as `mime`. Never upscales.
+export async function renderEdited(blob, { rotation = 0, flipH = false, flipV = false, crop, maxWidth = 0 }, mime, quality = 0.92) {
+  const decoded = await decode(blob);
+  try {
+    const { width, height } = decoded;
+    const g = outputGeometry(width, height, rotation, crop, maxWidth);
+    // Draw the whole image rotated/flipped into an oriented canvas, then copy the crop scaled.
+    const full = canvas(g.oriented.width, g.oriented.height);
+    const fctx = full.getContext('2d');
+    fctx.setTransform(...orientTransform(width, height, rotation, flipH, flipV));
+    fctx.drawImage(decoded.el, 0, 0, width, height);
+    const out = canvas(g.output.width, g.output.height);
+    const ctx = out.getContext('2d');
+    if (mime === 'image/jpeg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, g.output.width, g.output.height);
+    }
+    ctx.imageSmoothingQuality = 'high';
+    const s = g.source;
+    ctx.drawImage(full, s.x, s.y, s.width, s.height, 0, 0, g.output.width, g.output.height);
+    return await encode(out, mime, quality);
+  } finally {
+    URL.revokeObjectURL(decoded.url);
+  }
+}
+
+// JPEG bytes ready to embed in a PDF. JPEGs are used as they are (no quality loss) unless they rely on an
+// EXIF rotation, which PDF viewers ignore; everything else is drawn on white and encoded as JPEG.
+export async function pdfImage(blob, quality = 0.92) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const info = jpegInfo(bytes);
+  if (info && (readMetadata(bytes)?.exif?.orientation ?? 1) <= 1) return { bytes, ...info };
+  const decoded = await decode(blob);
+  try {
+    const c = canvas(decoded.width, decoded.height);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, decoded.width, decoded.height);
+    ctx.drawImage(decoded.el, 0, 0, decoded.width, decoded.height);
+    const jpeg = new Uint8Array(await (await encode(c, 'image/jpeg', quality)).arrayBuffer());
+    const out = jpegInfo(jpeg);
+    if (!out) throw new Error('Could not encode the image as JPEG');
+    return { bytes: jpeg, ...out };
+  } finally {
+    URL.revokeObjectURL(decoded.url);
+  }
+}
+
+// Main colours of an image (sampled from a small copy).
+export async function paletteOf(blob, count = 6) {
+  const decoded = await decode(blob);
+  try {
+    const k = Math.min(1, 200 / Math.max(decoded.width, decoded.height));
+    const w = Math.max(1, Math.round(decoded.width * k));
+    const h = Math.max(1, Math.round(decoded.height * k));
+    const c = canvas(w, h);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(decoded.el, 0, 0, w, h);
+    return extractPalette(ctx.getImageData(0, 0, w, h).data, count);
+  } finally {
+    URL.revokeObjectURL(decoded.url);
+  }
+}
+
+function ellipsize(ctx, text, max) {
+  if (ctx.measureText(text).width <= max) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(`${text.slice(0, mid)}…`).width <= max) lo = mid;
+    else hi = mid - 1;
+  }
+  return `${text.slice(0, lo)}…`;
+}
+
+// Draws one contact sheet. entries[i] = { blob | null, label, detail } for cell.index i; returns a PNG blob.
+export async function renderContactSheet(layout, sheet, entries, title) {
+  const c = canvas(layout.width, sheet.height);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, layout.width, sheet.height);
+  ctx.fillStyle = '#111111';
+  ctx.font = '600 18px system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.fillText(ellipsize(ctx, title, layout.width - 48), 24, 24);
+  for (const cell of sheet.cells) {
+    const entry = entries[cell.index];
+    ctx.fillStyle = '#f1f1f4';
+    ctx.fillRect(cell.x, cell.y, cell.w, cell.h);
+    if (entry?.blob) {
+      try {
+        const d = await decode(entry.blob);
+        try {
+          const f = fitInCell(d.width, d.height, cell);
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(d.el, f.x, f.y, f.w, f.h);
+        } finally {
+          URL.revokeObjectURL(d.url);
+        }
+      } catch { /* undecodable: leave the grey box */ }
+    }
+    ctx.fillStyle = '#111111';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText(ellipsize(ctx, entry?.label ?? '', cell.w), cell.x, cell.captionY);
+    ctx.fillStyle = '#666666';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillText(ellipsize(ctx, entry?.detail ?? '', cell.w), cell.x, cell.captionY + 15);
+  }
+  return encode(c, 'image/png');
 }
 
 export async function copyImageToClipboard(blob) {

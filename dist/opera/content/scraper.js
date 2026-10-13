@@ -137,6 +137,8 @@
         alt: extra.alt || '',
         title: extra.title || '',
         frameUrl: location.href,
+        // Facts for the image audit (only known for <img> elements).
+        ...(extra.audit ? { audit: extra.audit } : {}),
       });
     }
 
@@ -151,6 +153,14 @@
         const meta = {
           width: el.naturalWidth, height: el.naturalHeight, alt: el.alt, title: el.title,
           displayWidth: Math.round(rect.width), displayHeight: Math.round(rect.height),
+          audit: {
+            hasAlt: el.hasAttribute('alt'),
+            loading: (el.getAttribute('loading') || '').toLowerCase(),
+            sized: el.hasAttribute('width') && el.hasAttribute('height'),
+            top: Math.round(rect.top + (window.scrollY || 0)),
+            viewportHeight: window.innerHeight,
+            inFrame: window !== window.top,
+          },
         };
         const candidates = noteVariants(parseSrcset(el.getAttribute('srcset')));
         if (!o.scanSrcset) candidates.length = 0;

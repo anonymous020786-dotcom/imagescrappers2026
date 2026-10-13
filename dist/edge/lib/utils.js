@@ -171,6 +171,7 @@ export function dedupe(images, ignoreQuery = false) {
       prev.width = Math.max(prev.width || 0, img.width || 0);
       prev.height = Math.max(prev.height || 0, img.height || 0);
       prev.alt ||= img.alt;
+      prev.audit ||= img.audit;
     }
   }
   return [...seen.values()];

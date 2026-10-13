@@ -110,6 +110,8 @@
           <label>Resize: max height (px, 0 = off) <input type="number" name="resizeMaxHeight" min="0" max="20000" step="1"></label>
         </div>
         <p class="muted small">Resizing only shrinks images, keeps their shape, and applies to downloads and ZIPs. With "Keep original format", only JPEG, PNG and WebP are resized; GIFs and SVGs are saved unchanged.</p>
+        <label class="row"><input type="checkbox" name="stripMetadata"> Remove location and camera metadata (EXIF, GPS, XMP) from downloaded photos</label>
+        <p class="muted small">Done on your device. Applies to JPEG, PNG and WebP; other formats are saved unchanged. Needs access to all sites, because the files are fetched and cleaned before saving.</p>
         <label class="row"><input type="checkbox" name="saveAs"> Show the "Save as" dialog for single downloads</label>
       </fieldset>
 

@@ -37,6 +37,15 @@ PRÉVISUALISER ET ANALYSER
 • Visionneuse avec zoom, déplacement et tous les détails (dimensions, type, taille, couleur, texte alternatif, source)
 • Tailles et types exacts, détection des doublons visuels, couleur principale de chaque image
 • Copiez une image ou son URL, ouvrez-la, retrouvez-la dans la page ou lancez une recherche d'image inversée
+• Panneau latéral : gardez l'outil ouvert à côté de la page pendant que vous naviguez
+
+MODIFIER, NETTOYER ET AUDITER
+• Faites pivoter, retournez, recadrez et redimensionnez une image avant de la télécharger ou de la copier
+• Affichez l'appareil photo, la date et la position GPS d'une photo, et retirez ces métadonnées des téléchargements
+• Extrayez la palette de couleurs d'une image et copiez-la en HEX ou en variables CSS
+• Enregistrez les images en PDF (une par page, A4, Letter ou taille de l'image) ou en planche contact
+• Collections : enregistrez des images de n'importe quelle page dans des collections nommées et téléchargez-les plus tard
+• Audit d'images pour les développeurs web : texte alternatif manquant, fichiers trop lourds, images convertibles en WebP et erreurs de chargement différé, avec corrections et export CSV
 
 TÉLÉCHARGEZ COMME VOUS VOULEZ
 • Téléchargement groupé avec progression, pause, reprise et annulation, ou un seul ZIP (découpé en plusieurs parties pour les très gros ensembles)
@@ -99,6 +108,15 @@ ANSEHEN UND ANALYSIEREN
 • Großansicht mit Zoom, Verschieben und allen Details (Abmessungen, Typ, Größe, Farbe, Alternativtext, Quelle)
 • Genaue Dateigrößen und Typen, Erkennung optischer Duplikate, Hauptfarbe jedes Bildes
 • Bild oder URL kopieren, öffnen, auf der Seite anzeigen oder eine umgekehrte Bildersuche starten
+• Seitenleiste: den Scraper beim Surfen neben der Seite geöffnet lassen
+
+BEARBEITEN, BEREINIGEN UND PRÜFEN
+• Bilder vor dem Herunterladen oder Kopieren drehen, spiegeln, zuschneiden und verkleinern
+• Kamera, Aufnahmedatum und GPS-Standort eines Fotos anzeigen und diese Metadaten aus Downloads entfernen
+• Die Farbpalette eines Bildes ermitteln und als HEX oder CSS-Variablen kopieren
+• Bilder als PDF (eines pro Seite, A4, Letter oder Bildgröße) oder als Kontaktabzug speichern
+• Sammlungen: Bilder von beliebigen Seiten in benannten Sammlungen speichern und später herunterladen
+• Bild-Audit für Webentwickler: fehlender Alternativtext, zu große Dateien, Bilder, die WebP sein könnten, und Lazy-Loading-Fehler, mit Lösungen und CSV-Export
 
 HERUNTERLADEN, WIE SIE MÖCHTEN
 • Massen-Download mit Fortschritt, Pause, Fortsetzen und Abbrechen oder als eine ZIP-Datei (bei sehr großen Mengen in Teile aufgeteilt)
@@ -161,6 +179,15 @@ PREVISUALIZA Y ANALIZA
 • Visor con zoom, desplazamiento y todos los detalles (dimensiones, tipo, tamaño, color, texto alternativo, origen)
 • Tamaños y tipos exactos, detección de duplicados visuales y color principal de cada imagen
 • Copia una imagen o su URL, ábrela, localízala en la página o haz una búsqueda inversa de imágenes
+• Panel lateral: mantén el extractor abierto junto a la página mientras navegas
+
+EDITAR, LIMPIAR Y AUDITAR
+• Gira, voltea, recorta y redimensiona una imagen antes de descargarla o copiarla
+• Consulta la cámara, la fecha y la ubicación GPS de una foto, y elimina esos metadatos de las descargas
+• Extrae la paleta de colores de una imagen y cópiala en HEX o como variables CSS
+• Guarda imágenes como PDF (una por página, A4, Carta o tamaño de la imagen) o como hoja de contactos
+• Colecciones: guarda imágenes de cualquier página en colecciones con nombre y descárgalas más tarde
+• Auditoría de imágenes para desarrolladores web: texto alternativo ausente, archivos demasiado grandes, imágenes que podrían ser WebP y errores de carga diferida, con soluciones y exportación CSV
 
 DESCARGA COMO QUIERAS
 • Descarga masiva con progreso, pausa, reanudación y cancelación, o un solo ZIP (dividido en partes para conjuntos muy grandes)
