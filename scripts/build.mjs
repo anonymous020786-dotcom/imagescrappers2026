@@ -33,6 +33,13 @@ function requiredHostAccess(m) {
   return out;
 }
 
+// Firefox has its own sidebar API; Safari has neither.
+function withoutSidePanel(m) {
+  delete m.side_panel;
+  m.permissions = m.permissions.filter((p) => p !== 'sidePanel');
+  return m;
+}
+
 const TARGETS = {
   // Chromium family shares the same MV3 manifest.
   chrome: (m) => m,
@@ -44,7 +51,13 @@ const TARGETS = {
   firefox: (m) => {
     // Firefox lets users grant or withhold site access themselves (and optional_host_permissions needs
     // Firefox 128+), so keep <all_urls> as a regular host permission there.
-    m = requiredHostAccess(m);
+    m = withoutSidePanel(requiredHostAccess(m));
+    m.sidebar_action = {
+      default_panel: 'sidepanel/sidepanel.html',
+      default_title: 'Image Scraper Pro',
+      default_icon: { 16: 'icons/icon16.png', 32: 'icons/icon32.png' },
+      open_at_install: false,
+    };
     // Firefox MV3 uses an event page instead of a service worker.
     m.background = { scripts: ['background/background.js'], type: 'module' };
     m.browser_specific_settings = {
@@ -61,7 +74,7 @@ const TARGETS = {
   },
 
   safari: (m) => {
-    m = requiredHostAccess(m);
+    m = withoutSidePanel(requiredHostAccess(m));
     // Safari Web Extensions (via xcrun safari-web-extension-converter).
     // Safari has no downloads API; the dashboard falls back to <a download>.
     m.permissions = m.permissions.filter((p) => p !== 'downloads');

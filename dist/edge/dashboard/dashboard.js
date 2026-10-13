@@ -1,7 +1,10 @@
 import { api, isScriptableUrl } from '../lib/browser.js';
 import { applyTheme, loadSettings, saveSettings } from '../lib/settings.js';
 import { callInTab, scanTab, scanTabs } from '../lib/scanner.js';
-import { analyze, convert, copyImageToClipboard, fetchBlob, resizeActive } from '../lib/imaging.js';
+import { analyze, convert, copyImageToClipboard, fetchBlob, removeMetadata, resizeActive } from '../lib/imaging.js';
+import { readMetadata } from '../lib/exif.js';
+import { RULES, auditImages, auditToCSV } from '../lib/audit.js';
+import { openEditor } from './editor.js';
 import { ZipWriter } from '../lib/zip.js';
 import { DownloadLog, createGate, waitForDownload } from '../lib/downloader.js';
 import { applyRefererRules } from '../lib/referer.js';
@@ -28,6 +31,8 @@ const FILTER_STORE = 'dashboard-filters';
 let settings = await loadSettings();
 applyTheme(settings.theme);
 await refreshAccess();
+
+const panel = params.has('panel'); // running in the browser's side panel / sidebar
 
 const state = {
   mode: params.get('mode') || 'tab',
@@ -471,6 +476,7 @@ function mergeImages(fresh) {
       bytes: old.bytes,
       hash: old.hash,
       color: old.color,
+      webpBytes: old.webpBytes,
       duplicateOf: old.duplicateOf,
       type: old.bytes != null ? old.type : img.type,
       width: Math.max(img.width || 0, old.width || 0),
@@ -490,6 +496,8 @@ function setSource(text) {
 async function resolveTargetTab() {
   const id = Number(params.get('tabId'));
   if (id) return api.tabs.get(id);
+  // Side panel: the tab currently shown next to it.
+  if (panel) return (await api.tabs.query({ active: true, currentWindow: true }))[0] ?? null;
   // Opened directly: use the most recently used web tab of this window.
   const tabs = await api.tabs.query({ currentWindow: true });
   return tabs
@@ -582,6 +590,43 @@ $('live').onclick = async () => {
 window.addEventListener('pagehide', () => {
   if (state.live && state.tab) callInTab(state.tab.id, 'watch', [false], settings.allFrames).catch(() => {});
 });
+
+// -------------------------------------------------------------- side panel
+
+// The side panel stays open while the user browses: follow the active tab of its window and rescan.
+async function followTab(tab) {
+  if (!tab) return;
+  if (state.live && state.tab) callInTab(state.tab.id, 'watch', [false], settings.allFrames).catch(() => {});
+  state.live = false;
+  $('live').classList.remove('active');
+  state.abort?.abort();
+  if (!$('lightbox').classList.contains('hidden')) closeLightbox();
+  for (const d of document.querySelectorAll('dialog[open]')) d.close();
+  state.tab = tab;
+  state.images = [];
+  state.lastClicked = -1;
+  state.historyId = null;
+  if (!isScriptableUrl(tab.url)) {
+    setSource('This page cannot be scanned');
+    render();
+    return;
+  }
+  setSource(tab.title || tab.url);
+  await scan();
+}
+
+async function setupPanel() {
+  document.body.classList.add('panel');
+  const win = await api.windows.getCurrent().catch(() => null);
+  api.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
+    if (win && windowId !== win.id) return;
+    if (tabId !== state.tab?.id) followTab(await api.tabs.get(tabId).catch(() => null));
+  });
+  // The shown tab navigated to another page.
+  api.tabs.onUpdated.addListener((tabId, info, tab) => {
+    if (tabId === state.tab?.id && info.status === 'complete' && tab.url !== state.tab.url) followTab(tab);
+  });
+}
 
 // ------------------------------------------------------------------ import
 
@@ -761,17 +806,28 @@ function processBlob(blob, convertTo) {
   });
 }
 
+// True when downloads must go through fetch: re-encoding, or removing metadata.
+function needsFetch(convertTo) {
+  return needsProcessing(convertTo) || Boolean(settings.stripMetadata);
+}
+
+// Optional final step for every saved file: drop EXIF/GPS, XMP and comments (on the device).
+async function finishBlob(blob) {
+  if (!settings.stripMetadata) return blob;
+  return (await removeMetadata(blob, settings.jpegQuality)).blob;
+}
+
 // Fetches (with retries) and optionally converts/resizes one image.
 async function imageBlob(img, convertTo, signal) {
   let blob = await withRetry(() => fetchBlob(img, signal), settings.retries + 1, 1000, signal);
   if (needsProcessing(convertTo)) blob = await processBlob(blob, convertTo);
-  return blob;
+  return finishBlob(blob);
 }
 
 function useFetchPath(img, convertTo) {
   // Browser-managed downloads can't carry a Referer, so route those through
   // fetch (which the Referer rules apply to) when the option is on.
-  return needsProcessing(convertTo) || /^(data|blob):/.test(img.url) || !api.downloads?.download ||
+  return needsFetch(convertTo) || /^(data|blob):/.test(img.url) || !api.downloads?.download ||
     Boolean(settings.sendReferer && img.pageUrl && access.granted);
 }
 
@@ -897,8 +953,8 @@ async function downloadZip() {
 }
 
 $('download').onclick = async () => {
-  // Plain downloads are handled by the browser; only converting or resizing needs to fetch the images first.
-  if (needsProcessing($('convertTo').value) && !(await needAllSites())) return;
+  // Plain downloads are handled by the browser; converting, resizing or removing metadata fetches the images first.
+  if (needsFetch($('convertTo').value) && !(await needAllSites())) return;
   await downloadSelected();
 };
 $('downloadZip').onclick = async () => {
@@ -991,6 +1047,8 @@ function openLightbox(index) {
   }
   $('lbSelect').textContent = img.selected ? 'Deselect' : 'Select';
   $('lbHighlight').disabled = img.tabId == null;
+  $('lbExif').classList.add('hidden');
+  $('lbExif').replaceChildren();
   $('lightbox').classList.remove('hidden');
 }
 
@@ -1049,13 +1107,13 @@ $('lbSelect').onclick = () => {
   $('lbSelect').textContent = lbImage()?.selected ? 'Deselect' : 'Select';
 };
 $('lbDownload').onclick = async () => {
-  if (needsProcessing($('convertTo').value) && !(await needAllSites())) return;
+  if (needsFetch($('convertTo').value) && !(await needAllSites())) return;
   const img = lbImage();
   const filename = filenameFor(img, state.lightboxIndex, new Date(), $('convertTo').value);
   try {
-    if (needsProcessing($('convertTo').value) || /^(data|blob):/.test(img.url)) {
+    if (needsFetch($('convertTo').value) || /^(data|blob):/.test(img.url)) {
       let blob = await fetchBlob(img);
-      blob = await processBlob(blob, $('convertTo').value);
+      blob = await finishBlob(await processBlob(blob, $('convertTo').value));
       await saveBlob(blob, filename);
     } else await saveFile(img.url, filename, settings.saveAs);
     toast('Download started');
@@ -1099,6 +1157,187 @@ $('lbSearch').onclick = () => {
   const img = lbImage();
   if (img.url.startsWith('data:')) return toast('Inline images cannot be reverse searched by URL');
   api.tabs.create({ url: reverseSearchUrl($('lbSearchEngine').value, img.url) });
+};
+
+// ------------------------------------------------------------ photo info
+
+const EXIF_ROWS = [
+  ['Camera', (e) => [e.make, e.model].filter(Boolean).join(' ')],
+  ['Lens', (e) => e.lensModel],
+  ['Taken', (e) => e.dateTimeOriginal || e.dateTime],
+  ['Exposure', (e) => [e.exposureTime, e.fNumber, e.iso ? `ISO ${e.iso}` : '', e.focalLength].filter(Boolean).join(' · ')],
+  ['Software', (e) => e.software],
+  ['Artist', (e) => e.artist],
+  ['Copyright', (e) => e.copyright],
+];
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function showPhotoInfo(meta) {
+  const box = $('lbExif');
+  box.replaceChildren(el('h4', '', 'Photo info'));
+  if (!meta) {
+    box.append(el('p', 'muted', 'Metadata can be read from JPEG, PNG and WebP files only.'));
+  } else {
+    const e = meta.exif ?? {};
+    const dl = el('dl');
+    for (const [label, get] of EXIF_ROWS) {
+      const value = get(e);
+      if (value) dl.append(el('dt', '', label), el('dd', '', String(value)));
+    }
+    if (e.gps) dl.append(el('dt', '', 'Location'), el('dd', '', `${e.gps.lat}, ${e.gps.lon}`));
+    if (dl.childElementCount) box.append(dl);
+    if (e.gps) {
+      box.append(el('p', 'warn', 'This photo contains the GPS location where it was taken. Tick "Remove metadata" before downloading to save it without.'));
+    }
+    const extras = [meta.hasXmp && 'XMP', meta.hasText && 'text notes'].filter(Boolean);
+    if (!dl.childElementCount && !e.gps) box.append(el('p', 'muted', extras.length ? '' : 'No camera or location metadata in this file.'));
+    if (meta.metadataBytes) {
+      box.append(el('p', 'muted small', `Metadata: ${formatBytes(meta.metadataBytes)}${extras.length ? ` (includes ${extras.join(' and ')})` : ''}.`));
+    }
+  }
+  box.classList.remove('hidden');
+}
+
+$('lbInfo').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  try {
+    const blob = await fetchBlob(img);
+    if (lbImage() !== img) return;
+    showPhotoInfo(readMetadata(await blob.arrayBuffer()));
+  } catch (err) {
+    toast(`Could not read the file: ${err.message}`);
+  }
+};
+
+// ----------------------------------------------------------------- editor
+
+$('lbEdit').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  const index = state.lightboxIndex;
+  try {
+    const blob = await fetchBlob(img);
+    await openEditor(blob, {
+      quality: settings.jpegQuality,
+      toast,
+      save: async (out, ext) => {
+        const name = filenameFor({ ...img, type: ext }, index, new Date(), 'original').replace(/(\.[^./]+)?$/, `-edited.${ext}`);
+        await saveBlob(out, name);
+        toast('Download started');
+      },
+      copy: async (out) => {
+        await copyImageToClipboard(out);
+        toast('Edited image copied to clipboard');
+      },
+    });
+  } catch (err) {
+    toast(`Could not open the editor: ${err.message}`);
+  }
+};
+
+// ------------------------------------------------------------------ audit
+
+let auditReport = null;
+let auditRule = '';
+
+function auditTargets() {
+  return state.images.filter((i) => i.pageUrl || i.tabId != null);
+}
+
+function renderAudit() {
+  const report = (auditReport = auditImages(auditTargets()));
+  const saving = report.savingBytes ? ` · about ${formatBytes(report.savingBytes)} could be saved` : '';
+  $('auditSummary').textContent = report.total
+    ? `${report.withIssues.toLocaleString()} of ${report.total.toLocaleString()} images have findings${saving}.`
+    : 'No images to check. Scan a page first.';
+  const chips = $('auditRules');
+  chips.replaceChildren();
+  const ruleIds = Object.keys(RULES).filter((id) => report.byRule[id]?.count);
+  if (auditRule && !ruleIds.includes(auditRule)) auditRule = '';
+  for (const id of ['', ...ruleIds]) {
+    const chip = el('button', `chip${id === auditRule ? ' on' : ''}${id && RULES[id].severity === 'error' ? ' error' : ''}`);
+    chip.append(id ? RULES[id].label : 'All findings', el('span', 'n', String(id ? report.byRule[id].count : report.withIssues)));
+    chip.onclick = () => {
+      auditRule = id;
+      renderAudit();
+    };
+    chips.append(chip);
+  }
+  const list = $('auditList');
+  list.replaceChildren();
+  const items = report.items.filter((it) => !auditRule || it.issues.some((x) => x.rule === auditRule));
+  for (const { img, issues } of items.slice(0, 500)) {
+    const row = el('div', 'audit-item');
+    const thumb = el('img', 'checker');
+    thumb.src = safeImageSrc(img.url) ?? '';
+    thumb.alt = '';
+    thumb.loading = 'lazy';
+    thumb.onerror = () => (thumb.style.visibility = 'hidden');
+    const body = el('div', 'body');
+    body.append(el('span', 'url', img.url.length > 300 ? `${img.url.slice(0, 300)}…` : img.url));
+    const ul = el('ul');
+    for (const issue of issues) {
+      const li = el('li');
+      li.append(el('span', `sev ${issue.severity}`, issue.severity), `${RULES[issue.rule].label}`);
+      if (issue.detail) li.append(el('span', 'muted', ` — ${issue.detail}`));
+      li.title = RULES[issue.rule].fix;
+      ul.append(li);
+    }
+    body.append(ul);
+    row.append(thumb, body);
+    row.title = 'Open in the preview';
+    row.onclick = () => {
+      const index = state.view.indexOf(img);
+      if (index < 0) return toast('That image is hidden by the current filters');
+      $('auditDialog').close();
+      openLightbox(index);
+    };
+    list.append(row);
+  }
+  if (items.length > 500) list.append(el('p', 'muted small', `…and ${items.length - 500} more (all included in the CSV).`));
+  if (report.total && !items.length) list.append(el('p', 'muted small', 'Nothing to report.'));
+  $('auditCsv').disabled = !report.withIssues;
+}
+
+$('auditBtn').onclick = () => {
+  auditRule = '';
+  renderAudit();
+  $('auditDialog').showModal();
+};
+$('auditClose').onclick = () => $('auditDialog').close();
+$('auditCsv').onclick = () => {
+  if (!auditReport) return;
+  const name = applyTemplate('{pagedomain}_{date}_image-audit', { url: '', pageUrl: state.tab?.url ?? auditReport.items[0]?.img.pageUrl });
+  saveBlob(new Blob([auditToCSV(auditReport)], { type: 'text/csv' }), `${name}.csv`);
+};
+$('auditMeasure').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const todo = auditTargets().filter((i) => ['jpg', 'png', 'bmp'].includes(i.type) && i.webpBytes == null);
+  if (!todo.length) return toast('Nothing left to measure');
+  $('auditMeasure').disabled = true;
+  await ensureReferer();
+  const signal = startTask('Measuring WebP size');
+  let done = 0;
+  await mapLimit(todo, 3, async (img) => {
+    try {
+      const blob = await fetchBlob(img, signal);
+      img.bytes ??= blob.size;
+      img.webpBytes = (await convert(blob, 'webp', settings.jpegQuality)).size;
+    } catch { /* unreachable image: leave it unmeasured */ }
+    progress(++done, todo.length, 'Measuring WebP size');
+    $('auditMeasure').textContent = `Measuring ${done}/${todo.length}…`; // the status bar is behind the dialog
+  }, signal);
+  endTask();
+  $('auditMeasure').textContent = 'Measure WebP savings';
+  $('auditMeasure').disabled = false;
+  renderAudit();
 };
 
 // -------------------------------------------------------------- view & ui
@@ -1157,12 +1396,14 @@ api.storage.onChanged.addListener(async (changes) => {
     settings = await loadSettings();
     applyTheme(settings.theme);
     applyView();
+    $('stripMeta').checked = !!settings.stripMetadata;
   }
 });
 
 // ------------------------------------------------------------ keyboard
 
 document.addEventListener('keydown', (e) => {
+  if (document.querySelector('dialog[open]')) return; // dialogs handle their own keys (Esc closes them)
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
   const lightbox = !$('lightbox').classList.contains('hidden');
   if (lightbox) {
@@ -1211,7 +1452,12 @@ onAccessChange((granted) => {
 });
 writeFilters({ ...defaultFilters(), ...(storeGet(FILTER_STORE) ?? {}) });
 $('convertTo').value = settings.convertTo;
+$('stripMeta').checked = !!settings.stripMetadata;
+$('stripMeta').onchange = async () => {
+  settings = await saveSettings({ stripMetadata: $('stripMeta').checked });
+};
 if (matchMedia('(max-width: 900px)').matches) $('sidebar').classList.add('collapsed');
+if (panel) await setupPanel();
 
 if (state.mode === 'history') {
   render();

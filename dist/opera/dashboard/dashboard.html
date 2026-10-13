@@ -131,6 +131,7 @@
         <span class="spacer"></span>
         <button id="analyze" title="Fetch every visible image to get exact size, dimensions, colour and fingerprint">Analyze</button>
         <button id="dupes" title="Find visually identical images (perceptual hash)">Find duplicates</button>
+        <button id="auditBtn" title="Accessibility and performance check of this page's images (missing alt text, oversized files, lazy loading…)">Audit</button>
         <div class="seg">
           <button id="viewGrid" title="Grid view">▦</button>
           <button id="viewList" title="List view">☰</button>
@@ -161,6 +162,7 @@
         <option value="webp">WebP</option>
       </select>
     </label>
+    <label class="muted small" title="Removes EXIF (camera, GPS location, dates), XMP and comments from JPEG, PNG and WebP downloads, on your device"><input id="stripMeta" type="checkbox"> Remove metadata</label>
     <div class="menu-wrap">
       <button id="exportBtn">Export ▾</button>
       <div id="exportMenu" class="menu hidden">
@@ -197,7 +199,10 @@
           <option value="yandex">Yandex</option>
         </select>
         <button id="lbSearch">Reverse search</button>
+        <button id="lbInfo" title="Show camera, date and location metadata stored in the file">Photo info</button>
+        <button id="lbEdit" title="Crop, rotate, flip or resize, then download or copy">Edit…</button>
       </div>
+      <section id="lbExif" class="lb-exif hidden" aria-live="polite"></section>
       <p class="muted small">Scroll or click to zoom · drag to pan · ← → to browse · Space to select</p>
     </aside>
   </div>
@@ -235,6 +240,54 @@
     <div class="import-row end">
       <button id="importCancel">Cancel</button>
       <button id="importGo" class="primary">Import</button>
+    </div>
+  </dialog>
+
+  <dialog id="auditDialog" class="import-dialog audit-dialog">
+    <div class="dialog-head">
+      <h3>Image audit</h3>
+      <button id="auditClose" title="Close (Esc)">✕</button>
+    </div>
+    <p id="auditSummary" class="muted small"></p>
+    <div id="auditRules" class="chips"></div>
+    <div id="auditList" class="audit-list"></div>
+    <div class="import-row end">
+      <span class="muted small spacer">Checks the images as found on the page. Savings are estimates.</span>
+      <button id="auditMeasure" title="Fetch JPEG/PNG images and measure their real size as WebP, on your device">Measure WebP savings</button>
+      <button id="auditCsv">Export CSV</button>
+    </div>
+  </dialog>
+
+  <dialog id="editDialog" class="import-dialog edit-dialog">
+    <div class="dialog-head">
+      <h3>Edit image</h3>
+      <button id="edClose" title="Close (Esc)">✕</button>
+    </div>
+    <div class="edit-tools">
+      <button id="edRotL" title="Rotate left">⟲</button>
+      <button id="edRotR" title="Rotate right">⟳</button>
+      <button id="edFlipH" title="Flip horizontally">⇋</button>
+      <button id="edFlipV" title="Flip vertically">⇵</button>
+      <button id="edCropClear" title="Remove the crop">No crop</button>
+      <label>Width <input id="edWidth" type="number" min="1" step="1" placeholder="auto"></label>
+      <label>Format
+        <select id="edFormat">
+          <option value="png">PNG</option>
+          <option value="jpeg">JPEG</option>
+          <option value="webp">WebP</option>
+        </select>
+      </label>
+      <label>Quality <input id="edQuality" type="range" min="0.5" max="1" step="0.01"></label>
+    </div>
+    <div id="edStage" class="edit-stage checker">
+      <canvas id="edCanvas"></canvas>
+      <div id="edCrop" class="edit-crop hidden"></div>
+    </div>
+    <div class="import-row end">
+      <span id="edInfo" class="muted small spacer"></span>
+      <button id="edReset">Reset</button>
+      <button id="edCopy">Copy</button>
+      <button id="edDownload" class="primary">Download</button>
     </div>
   </dialog>
 

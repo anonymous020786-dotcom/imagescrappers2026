@@ -143,6 +143,13 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 83. Logged-in pages: requests carry your cookies, so galleries behind a login can be scraped
 84. **JPEG XL** and **HEIC/HEIF** detection, alongside JPG, PNG, GIF, WebP, AVIF, SVG, BMP, ICO and TIFF
 
+### Editing, photo privacy and page audits
+85. **Edit before download**: rotate, flip, drag to crop and resize one image, then download it or copy it as PNG, JPEG or WebP. The edit runs at full resolution and never upscales
+86. **Photo info**: shows the camera, lens, exposure, date and **GPS location** stored in a JPEG, PNG or WebP file, with a warning when a photo reveals where it was taken
+87. **Remove metadata on download**: strips EXIF (including GPS), XMP, comments and PNG text chunks from JPEG, PNG and WebP files. JPEG and PNG are cleaned losslessly, and colour profiles are kept. A rotated JPEG is re-encoded upright so it doesn't lose its orientation
+88. **Image audit** for web developers: missing alt text, images more than 2× larger than displayed, JPEG/PNG that could be WebP (with an estimate, or a measured size), offscreen images without `loading="lazy"`, lazy images in the first screen, and `<img>` without width/height. Findings are sorted worst first, each with a fix and an estimated saving, and can be exported as CSV
+89. **Side panel** (Chrome, Edge) and **sidebar** (Firefox): a compact scraper that stays open beside the page and rescans as you switch tabs or navigate
+
 ### Browser integration
 - Right-click menus: download an image with your naming rules, download a linked image, copy an image URL, reverse search, download all images on the page, scrape all tabs
 - Keyboard commands: `Alt+Shift+I` popup, `Alt+Shift+O` dashboard, `Alt+Shift+D` quick download (all can be changed)
@@ -168,9 +175,11 @@ src/
   dashboard/              main UI: filters, gallery, lightbox, downloads, ZIP, export, history, import
   bulk/                   bulk URL scraper, website crawler and URL pattern generator
   popup/                  toolbar popup
+  sidepanel/              side panel (Chrome, Edge) / sidebar (Firefox) entry: the dashboard in compact mode
   options/                settings page
   lib/                    shared modules: utils, zip, imaging, scanner, settings, browser shim,
-                          crawler, pagefetch, robots, urlgen, crawl, downloader, referer
+                          crawler, pagefetch, robots, urlgen, crawl, downloader, referer,
+                          audit (image audit rules), exif (read/remove metadata), editgeom (editor geometry)
 scripts/build.mjs         per-browser builds and store zips (no dependencies)
 scripts/make-icons.mjs    renders the PNG icons
 tests/                    unit tests (node:test) and a Playwright end-to-end test
@@ -223,9 +232,10 @@ the options page.
 | `storage`, `unlimitedStorage` | Settings, scrape history, download log and large result sets |
 | `declarativeNetRequestWithHostAccess` | Set the page as `Referer` on the extension's own image requests (hotlink-protected images) |
 | `clipboardWrite` | Copy URLs and images |
+| `sidePanel` (Chrome, Edge) | Show the scraper in the browser's side panel. Firefox uses `sidebar_action` instead; Safari has neither |
 
-Everything runs locally. The extension has no analytics and doesn't call any
-remote servers, except when you choose reverse image search.
+Everything runs locally, including the image editor, metadata reading and removal, and the audit. The extension
+has no analytics and doesn't call any remote servers, except when you choose reverse image search.
 
 ## Browser notes
 - **Firefox**: the build swaps the service worker for an MV3 event page and adds a `gecko` ID. Data-URI downloads are converted to blob URLs automatically.

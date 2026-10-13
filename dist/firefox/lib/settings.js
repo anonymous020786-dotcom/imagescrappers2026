@@ -47,6 +47,7 @@ export const DEFAULT_SETTINGS = {
   requestDelay: 0,
   skipDownloaded: false,
   sendReferer: true,
+  stripMetadata: false, // remove EXIF/GPS, XMP and comments from downloaded JPEG, PNG and WebP files
 
   // UI
   theme: 'system',

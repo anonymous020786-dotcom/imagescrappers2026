@@ -35,6 +35,12 @@ PREVIEW AND ANALYZE
 • Lightbox with zoom, pan and full details (dimensions, type, size, colour, alt text, source)
 • Analyze exact file sizes and real types, find visual duplicates, see each image's main colour
 • Copy an image or its URL, open it, jump to it on the page, or run a reverse image search
+• Side panel: keep the scraper open beside the page while you browse
+
+EDIT, CLEAN AND AUDIT
+• Rotate, flip, crop and resize an image before you download or copy it
+• See a photo's camera, date and GPS location, and remove that metadata from downloads
+• Image audit for web developers: missing alt text, oversized files, images that could be WebP and lazy-loading mistakes, with fixes and a CSV export
 
 DOWNLOAD YOUR WAY
 • Bulk download with progress, pause, resume and cancel, or one ZIP (split into parts for huge sets)
@@ -106,6 +112,7 @@ Find the images on web pages the user chooses and let the user filter, preview a
 | `unlimitedStorage` | Bulk scrapes and scan history can hold tens of thousands of image URLs (including inline data: images), which exceeds the default 10 MB local storage quota. |
 | `tabs` | Reads the URL and title of tabs so images can be named after the page, all tabs in a window can be scanned at once, and the toolbar badge shows each page's image count. |
 | `clipboardWrite` | Copies selected image URLs, or an image itself, to the clipboard when the user clicks Copy. |
+| `sidePanel` (since 1.3.0) | Shows the scraper in the browser's side panel when the user clicks "Open side panel" in the popup, so it stays open beside the page while they browse. |
 | `declarativeNetRequestWithHostAccess` | Some image hosts refuse requests that don't come from their own site. For the extension's own image requests only, a session rule sends the address of the page the image was found on as the Referer, so the image the user sees on that page can be previewed and downloaded. |
 | Host permission `<all_urls>` (optional since 1.2.0) | Requested at runtime, only when the user first uses a feature that needs it; until then the extension works through activeTab on the tab the user invokes it on. The user can scan images on any website, and those features must fetch the images (often from a different CDN domain) to measure, convert, de-duplicate and ZIP them. The bulk scraper and crawler also fetch pages the user lists. Nothing is fetched unless the user starts it. |
 

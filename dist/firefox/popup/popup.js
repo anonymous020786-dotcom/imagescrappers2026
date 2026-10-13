@@ -22,6 +22,13 @@ $('pick').onclick = () => openDashboard({ tabId: tab.id, pick: 1 });
 $('scroll').onclick = () => openDashboard({ tabId: tab.id, autoscroll: 1 });
 $('alltabs').onclick = () => openDashboard({ windowId: tab.windowId, mode: 'alltabs' });
 $('history').onclick = () => openDashboard({ mode: 'history' });
+// Side panel (Chrome, Edge) or sidebar (Firefox). open() must run straight from the click, before any await.
+const canPanel = Boolean(api.sidePanel?.open || api.sidebarAction?.open);
+$('panel').classList.toggle('hidden', !canPanel);
+$('panel').onclick = () => {
+  const opening = api.sidePanel?.open ? api.sidePanel.open({ windowId: tab.windowId }) : api.sidebarAction.open();
+  opening.then(() => window.close(), (err) => showError(err.message));
+};
 $('bulk').onclick = () => {
   const params = /^https?:/.test(tab?.url ?? '') ? { crawl: tab.url } : {};
   api.runtime.sendMessage({ type: 'open-bulk', params }).then(() => window.close());
