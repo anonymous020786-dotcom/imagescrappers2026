@@ -314,6 +314,96 @@ try {
     await dash.keyboard.press('Escape');
   });
 
+  // Waits for a finished download of this MIME type (Playwright stores downloads under random names).
+  const latestDownload = (mime) => worker.evaluate(async (src) => {
+    for (let i = 0; i < 50; i++) {
+      const items = await new Promise((r) => chrome.downloads.search({ orderBy: ['-startTime'] }, r));
+      const hit = items.find((d) => d.mime === src && d.state === 'complete');
+      if (hit) return hit;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    const items = await new Promise((r) => chrome.downloads.search({ orderBy: ['-startTime'], limit: 5 }, r));
+    return { missing: items.map((d) => `${d.mime} ${d.state} ${d.error ?? ''}`) };
+  }, mime);
+
+  await check('PDF export: one page per image, JPEGs embedded as-is', async () => {
+    const r = await dash.evaluate(async () => {
+      const { pdfImage } = await import('/lib/imaging.js');
+      const { buildPdf } = await import('/lib/pdf.js');
+      const c = new OffscreenCanvas(30, 20);
+      c.getContext('2d').fillRect(0, 0, 30, 20);
+      const png = await c.convertToBlob({ type: 'image/png' });
+      const jpg = await c.convertToBlob({ type: 'image/jpeg' });
+      const a = await pdfImage(png);
+      const b = await pdfImage(jpg);
+      const pdf = buildPdf([a, b], { pageSize: 'a4' });
+      return { a: [a.width, a.height, a.components], same: b.bytes.length === jpg.size, size: pdf.size };
+    });
+    assert.deepEqual(r.a, [30, 20, 3]);
+    assert.ok(r.same, 'JPEG was re-encoded');
+    assert.ok(r.size > 0);
+    // Through the UI: Export ▸ PDF ▸ Create PDF saves a .pdf file.
+    await dash.click('#selAll');
+    await dash.click('#exportBtn');
+    await dash.click('[data-export="pdf"]');
+    await dash.waitForSelector('#pdfDialog[open]');
+    assert.match(await dash.textContent('#pdfInfo'), /selected images?/);
+    await dash.selectOption('#pdfPage', 'a4');
+    await dash.click('#pdfGo');
+    await dash.waitForFunction(() => /PDF saved with \d+ pages/.test(document.querySelector('.toast')?.textContent ?? ''), null, { timeout: 30000 });
+    const pdf = await latestDownload('application/pdf');
+    assert.ok(!pdf.missing, `no PDF download: ${JSON.stringify(pdf.missing)}`);
+    const file = readFileSync(pdf.filename).toString('latin1');
+    const selected = await dash.$$eval('#gallery .card.selected', (els) => els.length);
+    assert.ok(file.startsWith('%PDF-1.4') && file.trimEnd().endsWith('%%EOF'));
+    const pages = Number(file.match(/\/Count (\d+)/)[1]);
+    assert.ok(pages >= selected - 4 && pages <= selected, `${pages} pages for ${selected} images`); // inline SVG/canvas may fail
+  });
+
+  await check('contact sheet export saves a PNG grid', async () => {
+    await dash.click('#exportBtn');
+    await dash.click('[data-export="sheet"]');
+    await dash.waitForFunction(() => /Contact sheet saved/.test(document.querySelector('.toast')?.textContent ?? ''), null, { timeout: 30000 });
+    const sheet = await latestDownload('image/png');
+    assert.ok(!sheet.missing, `no contact sheet download: ${JSON.stringify(sheet.missing)}`);
+    const png = readFileSync(sheet.filename);
+    assert.equal(png.readUInt32BE(16), 24 * 2 + 5 * 220 + 4 * 12); // IHDR width: 5 columns
+  });
+
+  await check('colour palette of an image', async () => {
+    await dash.dblclick('#gallery .card >> nth=0');
+    await dash.click('#lbColours');
+    await dash.waitForSelector('#lbPalette .swatch-btn');
+    const hexes = await dash.$$eval('#lbPalette .swatch-btn', (els) => els.map((e) => e.firstChild.textContent));
+    assert.ok(hexes.length >= 2 && hexes.every((h) => /^#[0-9a-f]{6}$/.test(h)), hexes.join(','));
+    await dash.keyboard.press('Escape');
+  });
+
+  await check('collections: save, reopen, remove', async () => {
+    await dash.click('#selNone');
+    await dash.click('#gallery .card >> nth=0');
+    await dash.click('#gallery .card >> nth=1');
+    await dash.click('#saveBtn');
+    await dash.click('#saveMenu >> text=+ New collection…');
+    await dash.fill('#nameInput', 'Favourites');
+    await dash.click('#nameOk');
+    await dash.waitForFunction(() => /Saved 2 images to "Favourites"/.test(document.querySelector('.toast')?.textContent ?? ''));
+    // Saving the same images again adds nothing.
+    await dash.click('#saveBtn');
+    await dash.click('#saveMenu >> text=Favourites (2)');
+    await dash.waitForFunction(() => /Nothing new to save/.test(document.querySelector('.toast')?.textContent ?? ''));
+    await dash.click('#collectionsBtn');
+    await dash.click('#collectionsList .hist >> nth=0');
+    await dash.waitForFunction(() => document.querySelectorAll('#gallery .card').length === 2);
+    assert.match(await dash.textContent('#sourceInfo'), /Collection: Favourites · 2 images/);
+    await dash.click('#gallery .card >> nth=0');
+    await dash.click('#removeSel');
+    await dash.waitForFunction(() => /from the collection/.test(document.querySelector('.toast')?.textContent ?? ''));
+    const stored = await worker.evaluate(async () => (await chrome.storage.local.get('collections')).collections);
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].images.length, 1);
+  });
+
   await check('history saved', async () => {
     const h = await worker.evaluate(async () => (await chrome.storage.local.get('history')).history);
     assert.ok(h?.length >= 1 && h[0].count > 5);

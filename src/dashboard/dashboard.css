@@ -182,3 +182,15 @@ body.panel .stats { flex-basis: 100%; margin: 0; order: 10; }
 body.panel .gallery { padding: 8px; }
 body.panel .gallery.grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
 body.panel .card .thumb { height: 110px; }
+
+.drawer-note { margin: 8px 14px 0; }
+#collectionsList { overflow-y: auto; padding: 8px; }
+.coll-actions { display: flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
+.coll-actions button { padding: 2px 7px; font-size: 12px; }
+.name-dialog { width: min(420px, calc(100vw - 32px)); }
+.name-dialog input { width: 100%; margin-top: 8px; }
+.menu .menu-note { padding: 6px 10px; font-size: 11.5px; color: var(--muted); }
+.menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; width: 100%; }
+.swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0 8px; }
+.swatch-btn { border: 0; border-radius: 8px; padding: 14px 4px 6px; font: 600 11.5px ui-monospace, monospace; text-align: center; }
+.swatch-btn small { display: block; font-weight: 400; opacity: .8; }

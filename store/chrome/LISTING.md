@@ -40,6 +40,7 @@ PREVIEW AND ANALYZE
 EDIT, CLEAN AND AUDIT
 • Rotate, flip, crop and resize an image before you download or copy it
 • See a photo's camera, date and GPS location, and remove that metadata from downloads
+• Extract an image's colour palette and copy it as HEX or CSS variables
 • Image audit for web developers: missing alt text, oversized files, images that could be WebP and lazy-loading mistakes, with fixes and a CSV export
 
 DOWNLOAD YOUR WAY
@@ -48,6 +49,8 @@ DOWNLOAD YOUR WAY
 • Convert to PNG, JPEG or WebP
 • Skip images you already downloaded
 • Export the list as TXT, CSV, JSON or an HTML gallery
+• Save images as a PDF (one per page, A4, Letter or image size) or a contact sheet
+• Collections: save images from any page into named collections and download them later
 
 BULK SCRAPER AND WEBSITE CRAWLER
 • Paste thousands of page or image URLs, or crawl a site by following links, pagination and sitemap.xml

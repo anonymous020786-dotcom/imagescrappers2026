@@ -25,6 +25,7 @@
       <button id="alltabs" title="Scrape every tab in this window">⧉ All tabs</button>
       <button id="bulkBtn" title="Scrape many URLs or crawl a whole website without opening the pages">🌐 Bulk &amp; crawl</button>
       <button id="importBtn" title="Paste or load a list of image or page URLs">⤓ Import URLs</button>
+      <button id="collectionsBtn" title="Images you saved to collections">★ Collections</button>
       <button id="historyBtn" title="Previous scrapes">🕘 History</button>
       <button id="themeBtn" title="Switch theme">◐</button>
       <button id="optionsBtn" title="Settings">⚙</button>
@@ -164,12 +165,18 @@
     </label>
     <label class="muted small" title="Removes EXIF (camera, GPS location, dates), XMP and comments from JPEG, PNG and WebP downloads, on your device"><input id="stripMeta" type="checkbox"> Remove metadata</label>
     <div class="menu-wrap">
+      <button id="saveBtn" title="Save the selected images to a collection (S)">★ Save ▾</button>
+      <div id="saveMenu" class="menu hidden"></div>
+    </div>
+    <div class="menu-wrap">
       <button id="exportBtn">Export ▾</button>
       <div id="exportMenu" class="menu hidden">
         <button data-export="txt">URL list (.txt)</button>
         <button data-export="csv">Spreadsheet (.csv)</button>
         <button data-export="json">Metadata (.json)</button>
         <button data-export="html">HTML gallery (.html)</button>
+        <button data-export="pdf">PDF document (.pdf)…</button>
+        <button data-export="sheet">Contact sheet (.png)</button>
       </div>
     </div>
     <button id="copyUrls" title="Copy selected URLs (Ctrl+C)">Copy URLs</button>
@@ -201,7 +208,10 @@
         <button id="lbSearch">Reverse search</button>
         <button id="lbInfo" title="Show camera, date and location metadata stored in the file">Photo info</button>
         <button id="lbEdit" title="Crop, rotate, flip or resize, then download or copy">Edit…</button>
+        <button id="lbColours" title="Extract the main colours of this image">Colours</button>
+        <button id="lbSave" title="Save this image to a collection">★ Save</button>
       </div>
+      <section id="lbPalette" class="lb-exif hidden" aria-live="polite"></section>
       <section id="lbExif" class="lb-exif hidden" aria-live="polite"></section>
       <p class="muted small">Scroll or click to zoom · drag to pan · ← → to browse · Space to select</p>
     </aside>
@@ -240,6 +250,53 @@
     <div class="import-row end">
       <button id="importCancel">Cancel</button>
       <button id="importGo" class="primary">Import</button>
+    </div>
+  </dialog>
+
+  <div id="collectionsPanel" class="drawer hidden" role="dialog" aria-label="Collections">
+    <div class="drawer-head">
+      <h3>Collections</h3>
+      <button id="newCollection">+ New</button>
+      <button id="closeCollections">✕</button>
+    </div>
+    <p class="muted small drawer-note">Saved on this device only. Collections keep image links, so pictures that are later removed from a website can stop loading.</p>
+    <div id="collectionsList"></div>
+  </div>
+
+  <dialog id="nameDialog" class="import-dialog name-dialog">
+    <form method="dialog">
+      <h3 id="nameTitle">New collection</h3>
+      <input id="nameInput" type="text" maxlength="80" placeholder="Collection name" required autocomplete="off">
+      <div class="import-row end">
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button id="nameOk" value="ok" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="pdfDialog" class="import-dialog">
+    <h3>Save as PDF</h3>
+    <p id="pdfInfo" class="muted small"></p>
+    <div class="import-row">
+      <label>Page size
+        <select id="pdfPage">
+          <option value="image">Same as each image</option>
+          <option value="a4">A4</option>
+          <option value="letter">Letter</option>
+        </select>
+      </label>
+      <label>Margin
+        <select id="pdfMargin">
+          <option value="0">None</option>
+          <option value="18">Small</option>
+          <option value="36">Normal</option>
+        </select>
+      </label>
+    </div>
+    <p class="muted small">One image per page, in the current order. JPEG photos are embedded without re-compressing; other formats are converted. Made on your device.</p>
+    <div class="import-row end">
+      <button id="pdfCancel">Cancel</button>
+      <button id="pdfGo" class="primary">Create PDF</button>
     </div>
   </dialog>
 

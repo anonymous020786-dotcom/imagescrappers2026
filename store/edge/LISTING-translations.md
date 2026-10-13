@@ -42,6 +42,9 @@ PRÉVISUALISER ET ANALYSER
 MODIFIER, NETTOYER ET AUDITER
 • Faites pivoter, retournez, recadrez et redimensionnez une image avant de la télécharger ou de la copier
 • Affichez l'appareil photo, la date et la position GPS d'une photo, et retirez ces métadonnées des téléchargements
+• Extrayez la palette de couleurs d'une image et copiez-la en HEX ou en variables CSS
+• Enregistrez les images en PDF (une par page, A4, Letter ou taille de l'image) ou en planche contact
+• Collections : enregistrez des images de n'importe quelle page dans des collections nommées et téléchargez-les plus tard
 • Audit d'images pour les développeurs web : texte alternatif manquant, fichiers trop lourds, images convertibles en WebP et erreurs de chargement différé, avec corrections et export CSV
 
 TÉLÉCHARGEZ COMME VOUS VOULEZ
@@ -110,6 +113,9 @@ ANSEHEN UND ANALYSIEREN
 BEARBEITEN, BEREINIGEN UND PRÜFEN
 • Bilder vor dem Herunterladen oder Kopieren drehen, spiegeln, zuschneiden und verkleinern
 • Kamera, Aufnahmedatum und GPS-Standort eines Fotos anzeigen und diese Metadaten aus Downloads entfernen
+• Die Farbpalette eines Bildes ermitteln und als HEX oder CSS-Variablen kopieren
+• Bilder als PDF (eines pro Seite, A4, Letter oder Bildgröße) oder als Kontaktabzug speichern
+• Sammlungen: Bilder von beliebigen Seiten in benannten Sammlungen speichern und später herunterladen
 • Bild-Audit für Webentwickler: fehlender Alternativtext, zu große Dateien, Bilder, die WebP sein könnten, und Lazy-Loading-Fehler, mit Lösungen und CSV-Export
 
 HERUNTERLADEN, WIE SIE MÖCHTEN
@@ -178,6 +184,9 @@ PREVISUALIZA Y ANALIZA
 EDITAR, LIMPIAR Y AUDITAR
 • Gira, voltea, recorta y redimensiona una imagen antes de descargarla o copiarla
 • Consulta la cámara, la fecha y la ubicación GPS de una foto, y elimina esos metadatos de las descargas
+• Extrae la paleta de colores de una imagen y cópiala en HEX o como variables CSS
+• Guarda imágenes como PDF (una por página, A4, Carta o tamaño de la imagen) o como hoja de contactos
+• Colecciones: guarda imágenes de cualquier página en colecciones con nombre y descárgalas más tarde
 • Auditoría de imágenes para desarrolladores web: texto alternativo ausente, archivos demasiado grandes, imágenes que podrían ser WebP y errores de carga diferida, con soluciones y exportación CSV
 
 DESCARGA COMO QUIERAS

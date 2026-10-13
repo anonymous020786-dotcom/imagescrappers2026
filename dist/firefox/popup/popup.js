@@ -22,6 +22,7 @@ $('pick').onclick = () => openDashboard({ tabId: tab.id, pick: 1 });
 $('scroll').onclick = () => openDashboard({ tabId: tab.id, autoscroll: 1 });
 $('alltabs').onclick = () => openDashboard({ windowId: tab.windowId, mode: 'alltabs' });
 $('history').onclick = () => openDashboard({ mode: 'history' });
+$('collections').onclick = () => openDashboard({ mode: 'collection' });
 // Side panel (Chrome, Edge) or sidebar (Firefox). open() must run straight from the click, before any await.
 const canPanel = Boolean(api.sidePanel?.open || api.sidebarAction?.open);
 $('panel').classList.toggle('hidden', !canPanel);
