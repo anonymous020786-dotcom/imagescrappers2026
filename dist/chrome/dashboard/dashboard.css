@@ -194,3 +194,26 @@ body.panel .card .thumb { height: 110px; }
 .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0 8px; }
 .swatch-btn { border: 0; border-radius: 8px; padding: 14px 4px 6px; font: 600 11.5px ui-monospace, monospace; text-align: center; }
 .swatch-btn small { display: block; font-weight: 400; opacity: .8; }
+
+.hint { margin: 6px 0; }
+.card .rights { position: absolute; top: 34px; right: 6px; background: rgba(0,0,0,.55); color: #fff; font-size: 10.5px; padding: 1px 6px; border-radius: 8px; }
+.gallery.list .card .rights { position: static; margin-right: 8px; }
+.drawer-search { margin: 8px 14px 0; }
+.tags { color: var(--accent); }
+.stacked { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.stacked input, .stacked textarea, .stacked select { width: 100%; }
+.import-row .grow { flex: 1; min-width: 180px; }
+.import-row .grow input { flex: 1; min-width: 0; }
+.import-dialog h4 { margin: 14px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+#prepWidth, #prepHeight, #prepMaxKB { width: 84px; }
+.prep-preview { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.prep-preview img { max-width: 200px; max-height: 140px; border-radius: 6px; }
+.name-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; padding: 5px 8px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.name-row:last-child { border-bottom: 0; }
+.name-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.name-row.clash .path { color: var(--danger); font-weight: 600; }
+.frame-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; max-height: 55vh; overflow-y: auto; padding: 2px; }
+.frame { position: relative; display: flex; align-items: center; justify-content: center; height: 104px; padding: 2px; border: 2px solid var(--border); border-radius: 8px; }
+.frame.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.frame canvas { max-width: 96px; max-height: 96px; }
+.frame span { position: absolute; bottom: 3px; right: 5px; background: rgba(0,0,0,.6); color: #fff; font-size: 10.5px; padding: 0 4px; border-radius: 6px; }

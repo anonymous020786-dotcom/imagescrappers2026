@@ -2,6 +2,7 @@ import { api, isFirefox, isScriptableUrl } from '../lib/browser.js';
 import { loadSettings } from '../lib/settings.js';
 import { scanTab } from '../lib/scanner.js';
 import { refreshAccess } from '../lib/access.js';
+import { findProfile, loadProfiles, withProfile } from '../lib/profiles.js';
 import { buildFilename, extensionFromUrl, filterImages, guessType, reverseSearchUrl } from '../lib/utils.js';
 
 const DASHBOARD = 'dashboard/dashboard.html';
@@ -75,7 +76,7 @@ async function downloadImages(images, settings, page) {
 }
 
 async function quickDownloadAll(tab) {
-  const settings = await loadSettings();
+  const settings = withProfile(await loadSettings(), findProfile(await loadProfiles(), tab.url));
   const { images, title } = await scanTab(tab, settings);
   const filtered = filterImages(images, {
     minWidth: settings.minWidth, minHeight: settings.minHeight, hideTracking: settings.hideTracking,

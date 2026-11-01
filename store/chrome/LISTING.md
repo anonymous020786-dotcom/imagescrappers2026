@@ -27,6 +27,7 @@ FINDS IMAGES OTHER TOOLS MISS
 
 FILTER AND SORT
 • Width, height, shape, file type, file size, domain and "found in" filters with live counts
+• Filter by main colour, find images that look alike, and keep the best copy of duplicates
 • Search URLs, alt text and titles (regular expressions supported)
 • Tracking pixels and ad/analytics images hidden automatically
 • Sort by resolution, size, name, type or page order
@@ -41,7 +42,13 @@ EDIT, CLEAN AND AUDIT
 • Rotate, flip, crop and resize an image before you download or copy it
 • See a photo's camera, date and GPS location, and remove that metadata from downloads
 • Extract an image's colour palette and copy it as HEX or CSS variables
-• Image audit for web developers: missing alt text, oversized files, images that could be WebP and lazy-loading mistakes, with fixes and a CSV export
+• Prepare a whole selection: exact sizes for social posts, a target file size, and your own text or logo watermark
+• Save single frames of a GIF as PNG files
+• Image audit for web developers: missing alt text, oversized files, images that could be WebP and lazy-loading mistakes, with fixes and a CSV export. Audit a whole crawled site, page by page
+
+CREDIT AND SOURCES
+• See the creator, credit, copyright and licence stated by the page or the file, and filter by them
+• ZIP files include a list of where each image came from
 
 DOWNLOAD YOUR WAY
 • Bulk download with progress, pause, resume and cancel, or one ZIP (split into parts for huge sets)
@@ -50,7 +57,9 @@ DOWNLOAD YOUR WAY
 • Skip images you already downloaded
 • Export the list as TXT, CSV, JSON or an HTML gallery
 • Save images as a PDF (one per page, A4, Letter or image size) or a contact sheet
-• Collections: save images from any page into named collections and download them later
+• Collections: save images from any page into named collections with tags and notes, download them later, and back them up
+• Site profiles: remember filters and file names per website
+• Check file names before downloading, and copy images as Markdown, HTML or BBCode
 
 BULK SCRAPER AND WEBSITE CRAWLER
 • Paste thousands of page or image URLs, or crawl a site by following links, pagination and sitemap.xml

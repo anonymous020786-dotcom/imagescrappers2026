@@ -29,6 +29,7 @@ TROUVE LES IMAGES QUE LES AUTRES OUTILS MANQUENT
 
 FILTRER ET TRIER
 • Filtres par largeur, hauteur, forme, type de fichier, taille, domaine et origine, avec compteurs en direct
+• Filtre par couleur principale, recherche d'images similaires et conservation de la meilleure copie des doublons
 • Recherche dans les URL, textes alternatifs et titres (expressions régulières prises en charge)
 • Pixels de suivi et images publicitaires masqués automatiquement
 • Tri par résolution, taille, nom, type ou ordre dans la page
@@ -44,8 +45,16 @@ MODIFIER, NETTOYER ET AUDITER
 • Affichez l'appareil photo, la date et la position GPS d'une photo, et retirez ces métadonnées des téléchargements
 • Extrayez la palette de couleurs d'une image et copiez-la en HEX ou en variables CSS
 • Enregistrez les images en PDF (une par page, A4, Letter ou taille de l'image) ou en planche contact
-• Collections : enregistrez des images de n'importe quelle page dans des collections nommées et téléchargez-les plus tard
-• Audit d'images pour les développeurs web : texte alternatif manquant, fichiers trop lourds, images convertibles en WebP et erreurs de chargement différé, avec corrections et export CSV
+• Collections : enregistrez des images de n'importe quelle page dans des collections nommées, avec étiquettes et notes, téléchargez-les plus tard et sauvegardez-les
+• Profils de site : mémorisez les filtres et les noms de fichiers pour chaque site
+• Préparez toute une sélection : tailles exactes pour les réseaux sociaux, taille de fichier cible et filigrane avec votre texte ou logo
+• Enregistrez des images isolées d'un GIF en PNG
+• Vérifiez les noms de fichiers avant de télécharger et copiez les images en Markdown, HTML ou BBCode
+• Audit d'images pour les développeurs web : texte alternatif manquant, fichiers trop lourds, images convertibles en WebP et erreurs de chargement différé, avec corrections et export CSV. Auditez tout un site exploré, page par page
+
+CRÉDITS ET SOURCES
+• Consultez le créateur, le crédit, le copyright et la licence indiqués par la page ou le fichier, et filtrez selon ces informations
+• Les fichiers ZIP contiennent la liste de la provenance de chaque image
 
 TÉLÉCHARGEZ COMME VOUS VOULEZ
 • Téléchargement groupé avec progression, pause, reprise et annulation, ou un seul ZIP (découpé en plusieurs parties pour les très gros ensembles)
@@ -100,6 +109,7 @@ FINDET BILDER, DIE ANDERE TOOLS ÜBERSEHEN
 
 FILTERN UND SORTIEREN
 • Filter nach Breite, Höhe, Form, Dateityp, Dateigröße, Domain und Fundort mit Live-Zählern
+• Nach Hauptfarbe filtern, ähnliche Bilder finden und von Duplikaten die beste Kopie behalten
 • Suche in URLs, Alternativtexten und Titeln (reguläre Ausdrücke werden unterstützt)
 • Tracking-Pixel und Werbe-/Analysebilder werden automatisch ausgeblendet
 • Sortieren nach Auflösung, Größe, Name, Typ oder Reihenfolge auf der Seite
@@ -115,8 +125,16 @@ BEARBEITEN, BEREINIGEN UND PRÜFEN
 • Kamera, Aufnahmedatum und GPS-Standort eines Fotos anzeigen und diese Metadaten aus Downloads entfernen
 • Die Farbpalette eines Bildes ermitteln und als HEX oder CSS-Variablen kopieren
 • Bilder als PDF (eines pro Seite, A4, Letter oder Bildgröße) oder als Kontaktabzug speichern
-• Sammlungen: Bilder von beliebigen Seiten in benannten Sammlungen speichern und später herunterladen
-• Bild-Audit für Webentwickler: fehlender Alternativtext, zu große Dateien, Bilder, die WebP sein könnten, und Lazy-Loading-Fehler, mit Lösungen und CSV-Export
+• Sammlungen: Bilder von beliebigen Seiten in benannten Sammlungen mit Schlagwörtern und Notizen speichern, später herunterladen und sichern
+• Website-Profile: Filter und Dateinamen pro Website merken
+• Eine ganze Auswahl vorbereiten: exakte Größen für soziale Netzwerke, Ziel-Dateigröße und ein Wasserzeichen mit Ihrem Text oder Logo
+• Einzelne Frames eines GIFs als PNG speichern
+• Dateinamen vor dem Herunterladen prüfen und Bilder als Markdown, HTML oder BBCode kopieren
+• Bild-Audit für Webentwickler: fehlender Alternativtext, zu große Dateien, Bilder, die WebP sein könnten, und Lazy-Loading-Fehler, mit Lösungen und CSV-Export. Eine ganze gecrawlte Website Seite für Seite prüfen
+
+URHEBER UND QUELLEN
+• Urheber, Bildnachweis, Copyright und Lizenz anzeigen, die Seite oder Datei angeben, und danach filtern
+• ZIP-Dateien enthalten eine Liste, woher jedes Bild stammt
 
 HERUNTERLADEN, WIE SIE MÖCHTEN
 • Massen-Download mit Fortschritt, Pause, Fortsetzen und Abbrechen oder als eine ZIP-Datei (bei sehr großen Mengen in Teile aufgeteilt)
@@ -171,6 +189,7 @@ ENCUENTRA IMÁGENES QUE OTRAS HERRAMIENTAS PASAN POR ALTO
 
 FILTRA Y ORDENA
 • Filtros por anchura, altura, forma, tipo de archivo, tamaño, dominio y origen, con recuentos en tiempo real
+• Filtra por color principal, encuentra imágenes parecidas y conserva la mejor copia de los duplicados
 • Búsqueda en URL, texto alternativo y títulos (admite expresiones regulares)
 • Píxeles de seguimiento e imágenes publicitarias ocultos automáticamente
 • Orden por resolución, tamaño, nombre, tipo u orden en la página
@@ -186,8 +205,16 @@ EDITAR, LIMPIAR Y AUDITAR
 • Consulta la cámara, la fecha y la ubicación GPS de una foto, y elimina esos metadatos de las descargas
 • Extrae la paleta de colores de una imagen y cópiala en HEX o como variables CSS
 • Guarda imágenes como PDF (una por página, A4, Carta o tamaño de la imagen) o como hoja de contactos
-• Colecciones: guarda imágenes de cualquier página en colecciones con nombre y descárgalas más tarde
-• Auditoría de imágenes para desarrolladores web: texto alternativo ausente, archivos demasiado grandes, imágenes que podrían ser WebP y errores de carga diferida, con soluciones y exportación CSV
+• Colecciones: guarda imágenes de cualquier página en colecciones con nombre, etiquetas y notas, descárgalas más tarde y haz copias de seguridad
+• Perfiles de sitio: recuerda los filtros y nombres de archivo de cada sitio web
+• Prepara toda una selección: tamaños exactos para redes sociales, tamaño de archivo objetivo y marca de agua con tu texto o logotipo
+• Guarda fotogramas sueltos de un GIF como PNG
+• Comprueba los nombres de archivo antes de descargar y copia imágenes como Markdown, HTML o BBCode
+• Auditoría de imágenes para desarrolladores web: texto alternativo ausente, archivos demasiado grandes, imágenes que podrían ser WebP y errores de carga diferida, con soluciones y exportación CSV. Audita todo un sitio rastreado, página por página
+
+CRÉDITOS Y FUENTES
+• Consulta el creador, el crédito, el copyright y la licencia que indican la página o el archivo, y filtra por ellos
+• Los archivos ZIP incluyen una lista del origen de cada imagen
 
 DESCARGA COMO QUIERAS
 • Descarga masiva con progreso, pausa, reanudación y cancelación, o un solo ZIP (dividido en partes para conjuntos muy grandes)

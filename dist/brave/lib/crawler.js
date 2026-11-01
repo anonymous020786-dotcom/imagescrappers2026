@@ -71,6 +71,7 @@ export class Crawler {
       for (const s of img.sources ?? [img.source]) if (!prev.sources.includes(s)) prev.sources.push(s);
       prev.width = Math.max(prev.width || 0, img.width || 0);
       prev.height = Math.max(prev.height || 0, img.height || 0);
+      prev.rights ??= img.rights;
       return null;
     }
     const entry = {

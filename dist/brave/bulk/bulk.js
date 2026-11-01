@@ -107,6 +107,7 @@ function renderStats(s) {
   $('progress').style.width = `${total ? Math.round(((s.done + s.failed + s.skipped) / total) * 100) : 0}%`;
   const has = s.images > 0;
   $('openDashboard').disabled = !has;
+  $('auditSite').disabled = !has;
   $('exportTxt').disabled = !has;
 }
 
@@ -217,13 +218,13 @@ function currentResults() {
   return crawler && !results.length ? [...crawler.images.values()] : results;
 }
 
-async function openInDashboard() {
+async function openInDashboard(audit = false) {
   const images = currentResults();
   if (!images.length) return;
   const key = `import:${Date.now()}`;
   const title = activeTab === 'crawl' ? `Crawl of ${extractUrls($('crawlStart').value)[0] ?? 'website'}` : `Bulk scrape (${images.length.toLocaleString()} images)`;
   await api.storage.local.set({ [key]: { title, images } });
-  await api.tabs.create({ url: api.runtime.getURL(`dashboard/dashboard.html?mode=import&key=${encodeURIComponent(key)}`) });
+  await api.tabs.create({ url: api.runtime.getURL(`dashboard/dashboard.html?mode=import&key=${encodeURIComponent(key)}${audit ? '&audit=1' : ''}`) });
 }
 
 function exportTxt() {
@@ -258,7 +259,8 @@ $('pause').onclick = () => {
   $('pause').textContent = crawler.paused ? 'Resume' : 'Pause';
 };
 $('stop').onclick = () => crawler?.stop();
-$('openDashboard').onclick = openInDashboard;
+$('openDashboard').onclick = () => openInDashboard();
+$('auditSite').onclick = () => openInDashboard(true);
 $('exportTxt').onclick = exportTxt;
 
 restoreOptions();

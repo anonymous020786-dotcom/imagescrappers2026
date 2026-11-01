@@ -2,9 +2,11 @@
 import { callInTab } from './scanner.js';
 import { dHashFromGray, fitWithin, typeFromMime } from './utils.js';
 import { orientTransform, outputGeometry } from './editgeom.js';
-import { detectFormat, readMetadata, stripMetadata } from './exif.js';
+import { detectFormat, readMetadata, readRights, stripMetadata } from './exif.js';
 import { jpegInfo } from './pdf.js';
 import { extractPalette } from './palette.js';
+import { fitToBytes, planGeometry, watermarkPosition } from './prepare.js';
+import { mergeRights } from './rights.js';
 import { fitInCell } from './sheet.js';
 
 const blobCache = new Map();
@@ -112,6 +114,8 @@ export async function analyze(img, signal) {
   const info = { bytes: blob.size, mime: blob.type };
   const type = typeFromMime(blob.type);
   if (type) info.type = type;
+  const rights = mergeRights(img.rights, readRights(await blob.arrayBuffer()));
+  if (rights) info.rights = rights;
   try {
     const decoded = await decode(blob);
     info.width = decoded.width;
@@ -157,6 +161,67 @@ export async function convert(blob, target, quality = 0.92, { maxWidth = 0, maxH
   } finally {
     URL.revokeObjectURL(decoded.url);
   }
+}
+
+function drawWatermark(ctx, width, height, { text, logo, position, opacity, scale }) {
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  if (logo) {
+    const w = Math.max(1, Math.round(width * scale));
+    const h = Math.max(1, Math.round((w * logo.height) / logo.width));
+    const at = watermarkPosition(width, height, w, h, position);
+    ctx.drawImage(logo, at.x, at.y, w, h);
+  } else if (text) {
+    ctx.font = '600 100px system-ui, sans-serif';
+    // Sized so the text spans `scale` of the width, without being taller than a fifth of the image.
+    const size = Math.max(10, Math.min(height / 5, (100 * width * scale) / ctx.measureText(text).width));
+    ctx.font = `600 ${size}px system-ui, sans-serif`;
+    ctx.textBaseline = 'top';
+    const at = watermarkPosition(width, height, Math.ceil(ctx.measureText(text).width), Math.ceil(size * 1.2), position);
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(1, size / 12);
+    ctx.strokeStyle = 'rgba(0,0,0,.75)';
+    ctx.strokeText(text, at.x, at.y);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, at.x, at.y);
+  }
+  ctx.restore();
+}
+
+// Applies a preparation plan (see prepare.js) and encodes the result. Returns { blob, met }, where met is false
+// when the target file size could not be reached. Formats that can't be redrawn safely (GIF animation, SVG) pass
+// through unchanged unless a conversion was asked for.
+export async function prepareImage(blob, target, plan, quality = 0.92) {
+  const mime = target === 'original' ? Object.values(CONVERT_MIME).find((m) => m === blob.type) : CONVERT_MIME[target];
+  if (!mime) return { blob, met: true };
+  const decoded = await decode(blob);
+  try {
+    const paint = (scale) => {
+      const g = planGeometry(decoded.width, decoded.height, plan, scale);
+      const c = canvas(g.width, g.height);
+      const ctx = c.getContext('2d');
+      if (g.pad || mime === 'image/jpeg') {
+        ctx.fillStyle = g.pad ? plan.background : '#ffffff';
+        ctx.fillRect(0, 0, g.width, g.height);
+      }
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(decoded.el, g.x, g.y, g.drawWidth, g.drawHeight);
+      drawWatermark(ctx, g.width, g.height, plan.watermark);
+      return c;
+    };
+    return await fitToBytes((q, scale) => encode(paint(scale), mime, q), plan.maxBytes, {
+      quality, lossy: mime !== 'image/png', canShrink: !plan.width, // an exact size must stay exact
+    });
+  } finally {
+    URL.revokeObjectURL(decoded.url);
+  }
+}
+
+// One decoded animation frame (a VideoFrame) as a PNG.
+export function frameToPng(frame) {
+  const c = canvas(frame.displayWidth, frame.displayHeight);
+  c.getContext('2d').drawImage(frame, 0, 0);
+  return encode(c, 'image/png');
 }
 
 function encode(c, mime, quality) {

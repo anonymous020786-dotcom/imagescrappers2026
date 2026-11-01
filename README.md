@@ -41,7 +41,7 @@ npm run build:chrome   # or a single target: chrome | edge | brave | opera | viv
 
 Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 
-## Features (80+)
+## Features (100+)
 
 ### Detection: finding every image
 1. `<img>` elements, including their natural (intrinsic) dimensions
@@ -137,7 +137,7 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 79. Unlimited local storage for history and large result sets (`unlimitedStorage`)
 
 ### Worldwide web support
-80. **Hotlink-protection bypass**: sends the original page as `Referer` for image requests (via `declarativeNetRequest`)
+80. **Referer for page images**: sends the address of the page an image was found on as `Referer`, so images shown on that page can be previewed and downloaded (via `declarativeNetRequest`)
 81. **Correct text decoding for non-UTF-8 sites**: Shift_JIS, EUC-JP, GBK, EUC-KR, Windows-1251 and other legacy encodings are detected from the BOM, headers and `<meta>`, just as browsers do
 82. Internationalized domain names and Unicode file names (UTF-8 ZIP entries)
 83. Logged-in pages: requests carry your cookies, so galleries behind a login can be scraped
@@ -153,6 +153,22 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 91. **Contact sheet**: a PNG grid of the selected images with file names, sizes and types, split into several sheets for very large selections
 92. **Collections**: save images from any page into named collections (★ Save, or `S`), then reopen, rename, delete, download, ZIP or export them later. Stored on your device only
 93. **Colour palette**: the main colours of an image as swatches; click to copy a HEX code, or copy them all as CSS variables
+
+### Credit, preparation and workflow
+94. **Licence and credit finder**: shows the creator, credit, copyright and licence stated in the page's JSON-LD and, after Analyze, in the file (XMP, IPTC, EXIF, PNG text). Filter by images that have details, by Creative Commons or public domain, or by those with none. This reports what a source states; it isn't legal advice
+95. **`sources.csv` in ZIP files**: records each file's original URL, page, date and any credit found. Can be turned off in the settings
+96. **Filter by main colour** (after Analyze): red, blue, green and nine more, with live counts
+97. **Find similar**: from the preview, shows the images that look most like the one you picked, closest first
+98. **Keep best**: after *Find duplicates*, selects the largest copy in each group and deselects the others
+99. **Exact sizes for a whole selection**: social and link-preview presets or a custom size, cropped to fill or fitted on a background colour
+100. **Target file size**: keeps each file under a limit, lowering quality first and then the dimensions
+101. **Your own watermark**: text or a logo, with position, opacity and size, plus a preview before you download
+102. **GIF frames**: save chosen frames of a GIF as PNG files, one at a time or in a ZIP (browsers with `ImageDecoder`; the button is hidden elsewhere)
+103. **Site profiles**: remember filters, file names and format for a website and its subdomains. Quick download uses them too
+104. **File name preview**: check the final names of a selection before downloading, with clashes flagged
+105. **Collection tags, notes and backup**: search collections by name, tag or note, and back them up to a file you can restore on any device
+106. **Copy as code**: copy the selected images as Markdown, HTML `<img>` tags or BBCode
+107. **Audit a whole site**: run the image audit on crawl results and rank the pages by possible savings, with a CSV report. Each image counts once, on the first page it was found. Full-render crawls find the most; fast crawls can't see layout, so they skip the size and lazy-loading checks
 
 ### Browser integration
 - Right-click menus: download an image with your naming rules, download a linked image, copy an image URL, reverse search, download all images on the page, scrape all tabs
@@ -184,7 +200,8 @@ src/
   lib/                    shared modules: utils, zip, imaging, scanner, settings, browser shim,
                           crawler, pagefetch, robots, urlgen, crawl, downloader, referer,
                           audit (image audit rules), exif (read/remove metadata), editgeom (editor geometry),
-                          pdf (PDF writer), sheet (contact sheet layout), palette (colour extraction), collections
+                          pdf (PDF writer), sheet (contact sheet layout), palette (colour extraction), collections,
+                          rights (credit and licence), prepare (sizes, target file size, watermark), profiles (site profiles)
 scripts/build.mjs         per-browser builds and store zips (no dependencies)
 scripts/make-icons.mjs    renders the PNG icons
 tests/                    unit tests (node:test) and a Playwright end-to-end test
@@ -224,7 +241,9 @@ by JavaScript and a Windows-1251 page. The test checks detection, filters,
 analysis, duplicates, ZIP files, crawling (depth, scope, robots, sitemap,
 pagination), full-render mode, charset decoding, Referer rules, skipping
 previous downloads, multi-part ZIPs, the URL generator, history, the popup and
-the options page.
+the options page. `tests/fixtures/rights.html` adds generated PNG, JPEG (with XMP)
+and animated GIF files for credit and licence details, colour filters, similar
+images, Prepare, GIF frames, site profiles and collection backups.
 
 ## Permissions
 

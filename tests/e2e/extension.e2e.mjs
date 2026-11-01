@@ -8,6 +8,7 @@
 //
 // Requires Playwright (npm i -D playwright, or a global install).
 import http from 'node:http';
+import { crc32, deflateSync } from 'node:zlib';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -47,6 +48,68 @@ cpSync(EXT, EXT_GRANTED, { recursive: true });
 }
 
 const BIG = Buffer.alloc(400 * 1024, 7);
+
+// A real PNG drawn by `pixel(x, y)` -> [r, g, b].
+function makePng(width, height, pixel) {
+  const chunk = (type, body) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(body.length);
+    head.write(type, 4, 'latin1');
+    const tail = Buffer.alloc(4);
+    tail.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), body])));
+    return Buffer.concat([head, body, tail]);
+  };
+  const raw = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) Buffer.from(pixel(x, y)).copy(raw, y * (width * 3 + 1) + 1 + x * 3);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.set([8, 2, 0, 0, 0], 8);
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+// A real animated GIF: each frame fills 4×4 with one palette colour. A clear code before every pixel keeps
+// the LZW codes 3 bits wide, so no compressor is needed.
+function makeGif(frames) {
+  const CLEAR = 4;
+  const END = 5;
+  const lzw = (colour) => {
+    const codes = [...Array.from({ length: 16 }, () => [CLEAR, colour]).flat(), END];
+    const out = [];
+    let bits = 0;
+    let filled = 0;
+    for (const code of codes) {
+      bits |= code << filled;
+      filled += 3;
+      while (filled >= 8) {
+        out.push(bits & 255);
+        bits >>= 8;
+        filled -= 8;
+      }
+    }
+    if (filled) out.push(bits & 255);
+    return out;
+  };
+  const bytes = [...Buffer.from('GIF89a'), 4, 0, 4, 0, 0x81, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 0x21, 0xff, 11, ...Buffer.from('NETSCAPE2.0'), 3, 1, 0, 0, 0];
+  for (const colour of frames) {
+    const data = lzw(colour);
+    bytes.push(0x21, 0xf9, 4, 0, 10, 0, 0, 0, 0x2c, 0, 0, 0, 0, 4, 0, 4, 0, 0, 2, data.length, ...data, 0);
+  }
+  bytes.push(0x3b);
+  return Buffer.from(bytes);
+}
+
+const ramp = (r, g, b) => (x) => [r && (x * 255) / 399, g && (x * 255) / 399, b && (x * 255) / 399].map(Math.round);
+const MEDIA = {
+  '/media/red.png': ['image/png', makePng(400, 300, (x) => [200 + (x % 55), 20, 20])],
+  '/media/red-copy.png': ['image/png', makePng(200, 150, (x) => [200 + ((x * 2) % 55), 20, 20])],
+  '/media/blue.png': ['image/png', makePng(400, 300, (x, y) => (Math.floor(x / 40) % 2 === Math.floor(y / 30) % 2 ? [20, 40, 220] : [10, 20, 160]))],
+  '/media/open.png': ['image/png', makePng(128, 128, (x, y) => ramp(0, 1, 0)(x * 3 + y))],
+  '/media/article.png': ['image/png', makePng(128, 128, (x, y) => ramp(1, 1, 0)(x + y * 3))],
+  '/media/anim.gif': ['image/gif', makeGif([1, 2])],
+};
 let base = '';
 const server = http.createServer((req, res) => {
   const path = req.url.split('?')[0];
@@ -63,6 +126,10 @@ const server = http.createServer((req, res) => {
     const ok = (req.headers.referer ?? '').startsWith(base);
     res.writeHead(ok ? 200 : 403, { 'content-type': 'image/png' });
     return res.end(ok ? ICON : '');
+  }
+  if (MEDIA[path]) {
+    res.writeHead(200, { 'content-type': MEDIA[path][0] });
+    return res.end(MEDIA[path][1]);
   }
   if (path.startsWith('/big/')) {
     res.writeHead(200, { 'content-type': 'image/png' });
@@ -315,16 +382,17 @@ try {
   });
 
   // Waits for a finished download of this MIME type (Playwright stores downloads under random names).
-  const latestDownload = (mime) => worker.evaluate(async (src) => {
+  const latestDownload = (mime, since) => worker.evaluate(async ([src, after]) => {
     for (let i = 0; i < 50; i++) {
-      const items = await new Promise((r) => chrome.downloads.search({ orderBy: ['-startTime'] }, r));
+      const items = await new Promise((r) => chrome.downloads.search({ orderBy: ['-startTime'], ...(after ? { startedAfter: after } : {}) }, r));
       const hit = items.find((d) => d.mime === src && d.state === 'complete');
       if (hit) return hit;
       await new Promise((r) => setTimeout(r, 200));
     }
     const items = await new Promise((r) => chrome.downloads.search({ orderBy: ['-startTime'], limit: 5 }, r));
     return { missing: items.map((d) => `${d.mime} ${d.state} ${d.error ?? ''}`) };
-  }, mime);
+  }, [mime, since]);
+  const now = () => new Date(Date.now() - 50).toISOString();
 
   await check('PDF export: one page per image, JPEGs embedded as-is', async () => {
     const r = await dash.evaluate(async () => {
@@ -410,6 +478,339 @@ try {
   });
 
 
+  // --------------------------------------------------- rights, prepare and tools
+  const XMP = '<rdf:Description photoshop:Credit="Credit Agency"><dc:rights><rdf:Alt><rdf:li>© 2026 Bo Chen</rdf:li></rdf:Alt></dc:rights></rdf:Description>';
+  MEDIA['/media/credit.jpg'] = ['image/jpeg', Buffer.from(await dash.evaluate(async (xmp) => {
+    const c = new OffscreenCanvas(120, 90);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#208040';
+    ctx.fillRect(0, 0, 120, 90);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(60, 0, 60, 45);
+    const jpg = new Uint8Array(await (await c.convertToBlob({ type: 'image/jpeg' })).arrayBuffer());
+    const body = new TextEncoder().encode(`http://ns.adobe.com/xap/1.0/\0${xmp}`);
+    return [0xff, 0xd8, 0xff, 0xe1, (body.length + 2) >> 8, (body.length + 2) & 255, ...body, ...jpg.subarray(2)];
+  }, XMP))];
+
+  const rightsPage = await context.newPage();
+  await rightsPage.goto(`${base}/rights.html`);
+  await rightsPage.waitForLoadState('load');
+  const rightsTab = await worker.evaluate(async (url) => (await chrome.tabs.query({ url }))[0].id, `${base}/rights.html`);
+  const dash2 = await context.newPage();
+  await dash2.goto(`chrome-extension://${extId}/dashboard/dashboard.html?tabId=${rightsTab}`);
+  await dash2.waitForFunction(() => document.querySelectorAll('#gallery .card').length >= 7, null, { timeout: 15000 });
+  await dash2.click('#resetFilters');
+  const cards = () => dash2.$$eval('#gallery .card .url', (els) => els.map((e) => e.textContent.split('/').pop()).sort());
+  const toasted = (re) => dash2.waitForFunction((src) => new RegExp(src).test(document.querySelector('.toast')?.textContent ?? ''), re.source, { timeout: 20000 });
+  const openCard = async (name) => {
+    await dash2.dblclick(`#gallery .card:has(.url:text-matches("${name}\$"))`);
+    await dash2.waitForSelector('#lightbox:not(.hidden)');
+  };
+  const settingsNow = () => worker.evaluate(async () => (await chrome.storage.sync.get('settings')).settings);
+
+  await check('credit and licence come from the image, not from the article around it', async () => {
+    await dash2.selectOption('#fRights', 'open');
+    await dash2.waitForFunction(() => document.querySelectorAll('#gallery .card').length === 1);
+    assert.deepEqual(await cards(), ['open.png']);
+    assert.equal(await dash2.textContent('#gallery .card .rights'), 'CC');
+    await dash2.selectOption('#fRights', 'known');
+    await dash2.waitForTimeout(200);
+    assert.ok(!(await cards()).includes('article.png'), 'used the article author as the image creator');
+    await openCard('open.png').catch(async () => { await dash2.selectOption('#fRights', 'open'); await openCard('open.png'); });
+    const meta = await dash2.textContent('#lbMeta');
+    assert.match(meta, /Open Agency/);
+    assert.match(meta, /Ana Silva/);
+    await dash2.keyboard.press('Escape');
+  });
+
+  await check('Analyze reads credit from the file and enables colour filters', async () => {
+    await dash2.selectOption('#fRights', 'any');
+    await dash2.click('#analyze');
+    await toasted(/Analy/);
+    await dash2.selectOption('#fRights', 'known');
+    await dash2.waitForFunction(() => document.querySelectorAll('#gallery .card').length === 2);
+    assert.deepEqual(await cards(), ['credit.jpg', 'open.png']);
+    await openCard('credit.jpg');
+    const meta = await dash2.textContent('#lbMeta');
+    assert.match(meta, /Credit Agency/);
+    assert.match(meta, /© 2026 Bo Chen/);
+    await dash2.keyboard.press('Escape');
+    await dash2.selectOption('#fRights', 'any');
+    await dash2.click('#fColors .chip:has-text("Red")');
+    await dash2.waitForFunction(() => document.querySelectorAll('#gallery .card').length < 4);
+    assert.deepEqual(await cards(), ['red-copy.png', 'red.png']);
+    await dash2.click('#resetFilters');
+    await dash2.waitForFunction(() => document.querySelectorAll('#gallery .card').length >= 7);
+  });
+
+  await check('Find similar ranks lookalikes first and can be cleared', async () => {
+    await openCard('red.png');
+    await dash2.click('#lbSimilar');
+    await dash2.waitForSelector('#similarClear:not(.hidden)', { timeout: 15000 });
+    const first = await dash2.$$eval('#gallery .card .url', (els) => els.slice(0, 2).map((e) => e.textContent.split('/').pop()));
+    assert.deepEqual(first.sort(), ['red-copy.png', 'red.png']);
+    assert.ok((await cards()).length < 7, 'unrelated images were not left out');
+    await dash2.click('#similarClear');
+    await dash2.waitForFunction(() => document.querySelectorAll('#gallery .card').length >= 7);
+  });
+
+  await check('Keep best selects the largest copy of duplicates', async () => {
+    assert.equal(await dash2.isVisible('#keepBest'), false);
+    await dash2.click('#dupes');
+    await dash2.waitForSelector('#keepBest:not(.hidden)', { timeout: 15000 });
+    await dash2.click('#gallery .card:has(.url:text-matches("red-copy.png$"))');
+    await dash2.click('#keepBest');
+    await toasted(/best copy in \d+ group/);
+    const selected = await dash2.$$eval('#gallery .card.selected .url', (els) => els.map((e) => e.textContent.split('/').pop()));
+    assert.ok(selected.includes('red.png'), selected.join());
+    assert.ok(!selected.includes('red-copy.png'), selected.join());
+  });
+
+  await check('ZIP files include sources.csv with credits, and it can be switched off', async () => {
+    await dash2.click('#selAll');
+    const since = now();
+    await dash2.click('#downloadZip');
+    await toasted(/ZIP saved/);
+    const zip = await latestDownload('application/zip', since);
+    assert.ok(!zip.missing, JSON.stringify(zip.missing));
+    const text = readFileSync(zip.filename).toString('utf8');
+    assert.ok(text.includes('sources.csv'), 'no sources.csv in the ZIP');
+    assert.ok(text.includes('Credit Agency'), 'credit missing from sources.csv');
+    assert.ok(text.includes(`${base}/rights.html`), 'page missing from sources.csv');
+
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.sync.get('settings');
+      await chrome.storage.sync.set({ settings: { ...settings, zipSources: false } });
+    });
+    await dash2.waitForTimeout(300);
+    await dash2.waitForFunction(() => !document.querySelector('.toast'), null, { timeout: 8000 });
+    const later = now();
+    await dash2.click('#downloadZip');
+    await toasted(/ZIP saved/);
+    const plain = await latestDownload('application/zip', later);
+    assert.ok(!plain.missing, JSON.stringify(plain.missing));
+    assert.ok(!readFileSync(plain.filename).toString('utf8').includes('sources.csv'), 'sources.csv was added anyway');
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.sync.get('settings');
+      await chrome.storage.sync.set({ settings: { ...settings, zipSources: true } });
+    });
+    await dash2.waitForTimeout(300);
+  });
+
+  await check('prepared images: exact size, target file size and a visible watermark', async () => {
+    const r = await dash2.evaluate(async () => {
+      const { prepareImage, decode } = await import('/lib/imaging.js');
+      const { planFromSettings } = await import('/lib/prepare.js');
+      const plain = { prepSize: 'none', prepFit: 'cover', prepMaxKB: 0, prepWatermarkText: '' };
+      const c = new OffscreenCanvas(800, 400);
+      const ctx = c.getContext('2d');
+      for (let i = 0; i < 4000; i++) {
+        ctx.fillStyle = `hsl(${(i * 37) % 360} 80% 50%)`;
+        ctx.fillRect((i * 13) % 800, (i * 7) % 400, 12, 12);
+      }
+      const jpg = await c.convertToBlob({ type: 'image/jpeg', quality: 0.95 });
+      const png = await c.convertToBlob({ type: 'image/png' });
+      const size = async (b) => {
+        const d = await decode(b);
+        URL.revokeObjectURL(d.url);
+        return `${d.width}x${d.height}`;
+      };
+      const corner = async (b, x, y) => {
+        const d = await decode(b);
+        const k = new OffscreenCanvas(d.width, d.height);
+        const kx = k.getContext('2d');
+        kx.drawImage(d.el, 0, 0);
+        URL.revokeObjectURL(d.url);
+        return [...kx.getImageData(x, y, 1, 1).data].slice(0, 3);
+      };
+      const white = new OffscreenCanvas(400, 200);
+      const wx = white.getContext('2d');
+      wx.fillStyle = '#000';
+      wx.fillRect(0, 0, 400, 200);
+      const black = await white.convertToBlob({ type: 'image/png' });
+      const logo = new OffscreenCanvas(40, 40);
+      const lx = logo.getContext('2d');
+      lx.fillStyle = '#ffffff';
+      lx.fillRect(0, 0, 40, 40);
+      const marked = await prepareImage(black, 'original', planFromSettings({ ...plain, prepWatermarkOpacity: 1, prepWatermarkScale: 0.25, prepWatermarkPosition: 'top-left' }, logo.transferToImageBitmap()));
+      const padded = await prepareImage(png, 'png', planFromSettings({ ...plain, prepSize: 'square', prepFit: 'contain', prepBackground: '#00ff00' }));
+      const small = await prepareImage(jpg, 'original', planFromSettings({ ...plain, prepMaxKB: 20 }));
+      const exact = await prepareImage(jpg, 'original', planFromSettings({ ...plain, prepSize: 'link', prepMaxKB: 1 }));
+      const gif = new Blob([new Uint8Array([71, 73, 70])], { type: 'image/gif' });
+      return {
+        padded: await size(padded.blob), pad: await corner(padded.blob, 5, 5),
+        before: jpg.size, small: small.blob.size, smallMet: small.met, smallType: small.blob.type,
+        exact: await size(exact.blob), exactMet: exact.met,
+        mark: await corner(marked.blob, 20, 20), clean: await corner(marked.blob, 300, 150), markedType: marked.blob.type,
+        gif: (await prepareImage(gif, 'original', planFromSettings({ ...plain, prepWatermarkText: 'x' }))).blob === gif,
+      };
+    });
+    assert.equal(r.padded, '1080x1080');
+    assert.deepEqual(r.pad, [0, 255, 0]);
+    assert.ok(r.before > 20 * 1024, `source only ${r.before}`);
+    assert.ok(r.smallMet && r.small <= 20 * 1024, `${r.small} bytes`);
+    assert.equal(r.smallType, 'image/jpeg');
+    assert.equal(r.exact, '1200x630');
+    assert.equal(r.exactMet, false);
+    assert.ok(r.mark[0] > 200, `watermark not drawn: ${r.mark}`);
+    assert.ok(r.clean[0] < 20, `watermark spread: ${r.clean}`);
+    assert.equal(r.markedType, 'image/png');
+    assert.ok(r.gif, 'GIF was redrawn');
+  });
+
+  await check('Prepare dialog: preview, then downloads use the chosen size', async () => {
+    await dash2.click('#selNone');
+    await dash2.click('#gallery .card:has(.url:text-matches("blue.png$"))');
+    await dash2.click('#prepBtn');
+    await dash2.waitForSelector('#prepareDialog[open]');
+    await dash2.selectOption('#prepSize', 'link');
+    await dash2.fill('#wmText', '© Test');
+    await dash2.click('#prepPreview');
+    await dash2.waitForFunction(() => /1200 × 630 px/.test(document.getElementById('prepPreviewInfo').textContent), null, { timeout: 15000 });
+    await dash2.click('#prepDone');
+    await dash2.waitForFunction(() => document.getElementById('prepOn').checked);
+    try {
+      const since = now();
+      await dash2.click('#download');
+      await toasted(/Downloaded 1/);
+      const png = await latestDownload('image/png', since);
+      assert.ok(!png.missing, JSON.stringify(png.missing));
+      assert.equal(readFileSync(png.filename).readUInt32BE(16), 1200);
+    } finally {
+      await dash2.uncheck('#prepOn');
+      await dash2.waitForFunction(async () => !(await chrome.storage.sync.get('settings')).settings.prepEnabled);
+    }
+  });
+
+  await check('GIF frames: lists real frames and saves one as PNG', async () => {
+    await openCard('anim.gif');
+    try {
+      assert.equal(await dash2.isVisible('#lbFrames'), true);
+      await dash2.click('#lbFrames');
+      await dash2.waitForSelector('#framesDialog[open]', { timeout: 10000 });
+      assert.equal((await dash2.$$('#frGrid .frame')).length, 2);
+      assert.equal(await dash2.isDisabled('#frSave'), true);
+      await dash2.click('#frGrid .frame >> nth=1');
+      assert.match(await dash2.textContent('#frInfo'), /1 of 2/);
+      const since = now();
+      await dash2.click('#frSave');
+      await dash2.waitForFunction(() => !document.getElementById('framesDialog').open);
+      const png = await latestDownload('image/png', since);
+      assert.ok(!png.missing, JSON.stringify(png.missing));
+      const file = readFileSync(png.filename);
+      assert.equal(file.readUInt32BE(16), 4);
+      await dash2.keyboard.press('Escape');
+      await openCard('blue.png');
+      assert.equal(await dash2.isVisible('#lbFrames'), false);
+    } finally {
+      await dash2.evaluate(() => document.getElementById('lbClose').click());
+    }
+  });
+
+  await check('Names dialog flags clashes before downloading', async () => {
+    await dash2.click('#selAll');
+    await dash2.click('#namesBtn');
+    await dash2.waitForSelector('#namesDialog[open]');
+    assert.match(await dash2.textContent('#rnSummary'), /no name clashes/);
+    await dash2.fill('#rnFile', 'same');
+    await dash2.waitForFunction(() => /names clash/.test(document.getElementById('rnSummary').textContent));
+    assert.ok((await dash2.$$('#rnList .name-row.clash')).length >= 2);
+    await dash2.click('#rnClose');
+  });
+
+  await check('Copy as Markdown and HTML', async () => {
+    await dash2.evaluate(() => {
+      navigator.clipboard.writeText = async (t) => {
+        window.copied = t;
+      };
+    });
+    await dash2.click('#selNone');
+    await dash2.click('#gallery .card:has(.url:text-matches("/red.png$"))');
+    await dash2.click('#exportBtn');
+    await dash2.click('[data-copy="markdown"]');
+    await toasted(/Copied 1 images/);
+    assert.equal(await dash2.evaluate(() => window.copied), `![Red \\[one\\]](${base}/media/red.png)`);
+    await dash2.click('#exportBtn');
+    await dash2.click('[data-copy="html"]');
+    await dash2.waitForFunction(() => window.copied.startsWith('<img'));
+    assert.match(await dash2.evaluate(() => window.copied), /alt="Red \[one\]" width="400" height="300">$/);
+  });
+
+  await check('site profile applies after a reload and can be removed', async () => {
+    const before = (await settingsNow()).filenameTemplate;
+    await dash2.fill('#fMinW', '150');
+    await dash2.waitForTimeout(300);
+    await dash2.click('#profileBtn');
+    await dash2.waitForSelector('#profileDialog[open]');
+    await dash2.fill('#pfFile', 'site_{index:2}');
+    await dash2.selectOption('#pfFormat', 'png');
+    await dash2.click('#pfSave');
+    await toasted(/Profile saved/);
+    await dash2.reload();
+    await dash2.waitForSelector('#gallery .card');
+    assert.equal(await dash2.inputValue('#fMinW'), '150');
+    assert.equal(await dash2.inputValue('#convertTo'), 'png');
+    assert.match(await dash2.textContent('#profileInfo'), /Using the profile/);
+    await dash2.click('#selAll');
+    await dash2.click('#namesBtn');
+    assert.equal(await dash2.inputValue('#rnFile'), 'site_{index:2}');
+    await dash2.fill('#rnFile', 'renamed_{index:2}');
+    await dash2.click('#rnSave');
+    await toasted(/Names saved for/);
+    const stored = await worker.evaluate(async () => (await chrome.storage.local.get('site-profiles'))['site-profiles']);
+    assert.equal(stored['127.0.0.1'].filenameTemplate, 'renamed_{index:2}');
+    assert.equal((await settingsNow()).filenameTemplate, before, 'a profile rename changed the global settings');
+    await dash2.click('#profileBtn');
+    await dash2.click('#pfRemove');
+    await toasted(/Profile removed/);
+    // Back to the filters from before the profile was loaded.
+    assert.equal(await dash2.inputValue('#fMinW'), '150');
+    assert.equal(await dash2.inputValue('#convertTo'), 'original');
+    await dash2.click('#resetFilters');
+  });
+
+  await check('collections: tags, search, backup and restore', async () => {
+    await dash2.click('#selNone');
+    await dash2.click('#gallery .card >> nth=0');
+    await dash2.click('#saveBtn');
+    await dash2.click('#saveMenu >> text=+ New collection…');
+    await dash2.fill('#nameInput', 'Tagged');
+    await dash2.click('#nameOk');
+    await toasted(/Saved 1 image to "Tagged"/);
+    await dash2.click('#collectionsBtn');
+    await dash2.click('#collectionsList .hist:has-text("Tagged") button:has-text("Tags")');
+    await dash2.fill('#collTags', 'Beach, Trip');
+    await dash2.fill('#collNote', 'Holiday ideas');
+    await dash2.click('#collDialog button[value="ok"]');
+    await dash2.waitForSelector('#collectionsList .tags:has-text("beach, trip")');
+    await dash2.fill('#collSearch', 'holiday');
+    await dash2.waitForFunction(() => document.querySelectorAll('#collectionsList .hist').length === 1);
+    await dash2.fill('#collSearch', '');
+    const since = now();
+    await dash2.click('#backupCollections');
+    await toasted(/Backed up/);
+    const backup = await latestDownload('application/json', since);
+    assert.ok(!backup.missing, JSON.stringify(backup.missing));
+    await worker.evaluate(() => chrome.storage.local.remove('collections'));
+    await dash2.setInputFiles('#collFile', backup.filename);
+    await toasted(/Restored 2 new collections/);
+    await dash2.waitForSelector('#collectionsList .tags:has-text("beach, trip")');
+    await dash2.setInputFiles('#collFile', { name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"nope":1}') });
+    await toasted(/not a collections backup/);
+    await dash2.click('#closeCollections');
+  });
+
+  await check('options page shows the download log and sources.csv switch', async () => {
+    const opts = await context.newPage();
+    await opts.goto(`chrome-extension://${extId}/options/options.html`);
+    await opts.waitForFunction(() => /^\d/.test(document.getElementById('logSize').textContent));
+    assert.equal(await opts.isChecked('input[name="zipSources"]'), true);
+    await opts.close();
+  });
+
+  await rightsPage.close();
+  await dash2.close();
+
   // ------------------------------------------------------------ bulk & crawl
   const waitForLog = (p, text, timeout = 30000) =>
     p.waitForFunction((t) => document.getElementById('log').textContent.includes(t), text, { timeout });
@@ -445,6 +846,20 @@ try {
     }
     assert.ok(!has('g-small.png'), 'took the small srcset candidate');
     assert.ok(!has('secret.png'), 'scraped a robots-disallowed page');
+  });
+
+  await check('Audit site opens a report ranked by page', async () => {
+    const [report] = await Promise.all([context.waitForEvent('page'), crawlPage.click('#auditSite')]);
+    await report.waitForSelector('#auditDialog[open]');
+    assert.equal(await report.inputValue('#auditView'), 'page');
+    const rows = await report.$$eval('#auditList .audit-item', (els) => els.map((e) => e.textContent));
+    assert.ok(rows.length >= 2, `only ${rows.length} pages`);
+    assert.ok(rows.every((r) => /\/site\//.test(r)), rows.join(' | '));
+    await report.click('#auditList .audit-item >> nth=0');
+    await report.waitForSelector('#auditRules .chip.on');
+    assert.equal(await report.inputValue('#auditView'), 'image');
+    assert.ok((await report.$$('#auditList .audit-item')).length >= 1);
+    await report.close();
   });
 
   await check('hotlink-protected image loads via the Referer rule', async () => {

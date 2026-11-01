@@ -2,6 +2,7 @@
 // static HTML. Runs in extension pages (needs DOMParser); host permissions let
 // these requests reach any site, with the user's cookies for logged-in pages.
 import { decodeHtml, extractUrls } from './crawl.js';
+import { rightsFromJsonLd } from './rights.js';
 import { isImageUrl, typeFromMime } from './utils.js';
 
 const LAZY_ATTRS = [
@@ -59,6 +60,7 @@ export function extractFromDocument(doc, pageUrl) {
     const prev = images.get(url);
     if (prev) {
       if (!prev.sources.includes(source)) prev.sources.push(source);
+      prev.rights ??= extra.rights;
       return;
     }
     images.set(url, { url, source, sources: [source], order: order++, width: 0, height: 0, alt: '', title: '', ...extra });
@@ -70,6 +72,12 @@ export function extractFromDocument(doc, pageUrl) {
       title: img.getAttribute('title') ?? '',
       width: Number(img.getAttribute('width')) || 0,
       height: Number(img.getAttribute('height')) || 0,
+      audit: {
+        hasAlt: img.hasAttribute('alt'),
+        loading: (img.getAttribute('loading') ?? '').toLowerCase(),
+        sized: img.hasAttribute('width') && img.hasAttribute('height'),
+        staticHtml: true,
+      },
     };
     const best = bestFromSrcset(img.getAttribute('srcset'));
     const lazy = LAZY_ATTRS.map((a) => img.getAttribute(a)).find(Boolean);
@@ -111,7 +119,12 @@ export function extractFromDocument(doc, pageUrl) {
         if (Array.isArray(n)) return n.forEach(walk);
         for (const [k, v] of Object.entries(n)) {
           if (/^(image|logo|thumbnailUrl|contentUrl)$/.test(k)) {
-            for (const item of [].concat(v)) add(typeof item === 'string' ? item : item?.url ?? item?.contentUrl, 'meta');
+            for (const item of [].concat(v)) {
+              // Only an image's own object describes its rights: a page's author isn't always the photographer.
+              const owner = typeof item === 'object' ? item : /ImageObject/.test(String(n['@type'])) ? n : null;
+              const rights = rightsFromJsonLd(owner);
+              add(typeof item === 'string' ? item : item?.url ?? item?.contentUrl, 'meta', rights ? { rights } : {});
+            }
           } else if (typeof v === 'object') walk(v);
         }
       };

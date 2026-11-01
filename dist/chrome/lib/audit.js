@@ -56,8 +56,10 @@ export function auditImage(img) {
   const a = img.audit;
   const isElement = a && ELEMENT_SOURCES.has(img.source);
   const visible = img.displayWidth >= MIN_VISIBLE && img.displayHeight >= MIN_VISIBLE;
+  // Fast crawls read the HTML without laying it out, so only the width attribute can rule out icons.
+  const shown = visible || Boolean(a?.staticHtml && (!img.width || img.width >= MIN_VISIBLE));
 
-  if (isElement && !a.hasAlt && visible) {
+  if (isElement && !a.hasAlt && shown) {
     out.push(issue('missing-alt', 'No alt attribute'));
   }
 
@@ -98,7 +100,7 @@ export function auditImage(img) {
     if (!offscreen && a.loading === 'lazy' && visible) out.push(issue('lazy-above-fold', `Visible at ${a.top}px`));
   }
 
-  if (isElement && !a.sized && visible) out.push(issue('no-dimensions', 'Layout can shift while it loads'));
+  if (isElement && !a.sized && shown) out.push(issue('no-dimensions', 'Layout can shift while it loads'));
 
   return out;
 }
@@ -126,9 +128,34 @@ export function auditImages(images) {
   return { items, byRule, total: images.length, withIssues: items.length, savingBytes };
 }
 
+// One row per page, biggest possible saving first. Each image counts once, on the first page it was found.
+export function auditByPage(report) {
+  const pages = new Map();
+  for (const { img, issues } of report.items) {
+    const page = img.pageUrl || 'unknown page';
+    if (!pages.has(page)) pages.set(page, { page, title: img.pageTitle ?? '', images: 0, errors: 0, warnings: 0, notes: 0, savingBytes: 0 });
+    const row = pages.get(page);
+    row.images++;
+    row.savingBytes += Math.max(...issues.map((i) => i.savingBytes));
+    for (const i of issues) {
+      if (i.severity === 'error') row.errors++;
+      else if (i.severity === 'warning') row.warnings++;
+      else row.notes++;
+    }
+  }
+  return [...pages.values()].sort((x, y) => y.savingBytes - x.savingBytes || y.errors - x.errors || y.warnings - x.warnings || y.notes - x.notes);
+}
+
 function csvCell(v) {
-  const s = String(v ?? '');
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  let s = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`; // page text must not run as a spreadsheet formula
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+export function pageAuditToCSV(pages) {
+  const rows = [['page', 'title', 'images_with_findings', 'errors', 'warnings', 'notes', 'estimated_saving_bytes']];
+  for (const p of pages) rows.push([p.page, p.title, p.images, p.errors, p.warnings, p.notes, p.savingBytes]);
+  return rows.map((r) => r.map(csvCell).join(',')).join('\n');
 }
 
 export function auditToCSV(report) {

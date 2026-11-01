@@ -88,6 +88,22 @@
     return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(xml)))}`;
   }
 
+  // Credit and licence from a schema.org ImageObject (mirrors rightsFromJsonLd in lib/rights.js, which can't be
+  // imported into this classic script).
+  function jsonLdRights(node) {
+    if (!node || typeof node !== 'object') return null;
+    const name = (v) => (typeof v === 'string' ? v : Array.isArray(v) ? v.map(name).filter(Boolean).join(', ') : typeof v?.name === 'string' ? v.name : '');
+    const link = (v) => (Array.isArray(v) ? link(v[0]) : typeof v === 'string' ? v : typeof v?.url === 'string' ? v.url : '');
+    const rights = {
+      creator: name(node.creator) || name(node.author),
+      credit: name(node.creditText),
+      copyright: name(node.copyrightNotice) || name(node.copyrightHolder),
+      license: link(node.license),
+      licensePage: link(node.acquireLicensePage),
+    };
+    return Object.values(rights).some(Boolean) ? rights : null;
+  }
+
   function scan(opts = {}) {
     const o = {
       scanImgTags: true, scanSrcset: true, scanBackgrounds: true, scanPseudo: true, scanSvg: true,
@@ -124,7 +140,13 @@
         elementsByUrl.get(url).push(el);
       }
       const key = `${source}|${url}`;
-      if (seen.has(key)) return;
+      if (seen.has(key)) {
+        if (extra.rights) {
+          const hit = results.find((r) => r.url === url && r.source === source);
+          if (hit) hit.rights ??= extra.rights;
+        }
+        return;
+      }
       seen.add(key);
       results.push({
         url,
@@ -139,6 +161,7 @@
         frameUrl: location.href,
         // Facts for the image audit (only known for <img> elements).
         ...(extra.audit ? { audit: extra.audit } : {}),
+        ...(extra.rights ? { rights: extra.rights } : {}),
       });
     }
 
@@ -264,7 +287,11 @@
             if (Array.isArray(node)) return node.forEach(collect);
             for (const [k, v] of Object.entries(node)) {
               if (/^(image|logo|thumbnailUrl|contentUrl)$/.test(k)) {
-                for (const item of [].concat(v)) add(typeof item === 'string' ? item : item?.url || item?.contentUrl, 'meta', null, { title: `ld+json ${k}` });
+                for (const item of [].concat(v)) {
+                  // Only an image's own object describes its rights: a page's author isn't always the photographer.
+                  const owner = typeof item === 'object' ? item : /ImageObject/.test(String(node['@type'])) ? node : null;
+                  add(typeof item === 'string' ? item : item?.url || item?.contentUrl, 'meta', null, { title: `ld+json ${k}`, rights: jsonLdRights(owner) });
+                }
               } else if (typeof v === 'object') collect(v);
             }
           };

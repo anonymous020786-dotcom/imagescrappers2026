@@ -70,16 +70,7 @@ document.getElementById('importFile').onchange = async (e) => {
     const data = JSON.parse(await file.text());
     const clean = Object.fromEntries(Object.entries(data).filter(([k, v]) => k in DEFAULT_SETTINGS && typeof v === typeof DEFAULT_SETTINGS[k]));
     settings = await saveSettings(clean);
-    async function showLogSize() {
-  document.getElementById('logSize').textContent = (await DownloadLog.load()).size.toLocaleString();
-}
-document.getElementById('clearLog').onclick = async () => {
-  await DownloadLog.clear();
-  showLogSize();
-};
-
-fill(settings);
-showLogSize();
+    fill(settings);
     document.getElementById('saved').textContent = `Imported ${Object.keys(clean).length} settings`;
   } catch (err) {
     document.getElementById('saved').textContent = `Import failed: ${err.message}`;
@@ -100,7 +91,16 @@ document.getElementById('shortcuts').onclick = () => {
   api.tabs.create({ url }).catch(() => alert(`Open ${url} to change keyboard shortcuts.`));
 };
 
+async function showLogSize() {
+  document.getElementById('logSize').textContent = (await DownloadLog.load()).size.toLocaleString();
+}
+document.getElementById('clearLog').onclick = async () => {
+  await DownloadLog.clear();
+  showLogSize();
+};
+
 fill(settings);
+showLogSize();
 
 // ------------------------------------------------------------ site access
 
