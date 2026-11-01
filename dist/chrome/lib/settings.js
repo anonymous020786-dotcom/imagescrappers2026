@@ -48,6 +48,20 @@ export const DEFAULT_SETTINGS = {
   skipDownloaded: false,
   sendReferer: true,
   stripMetadata: false, // remove EXIF/GPS, XMP and comments from downloaded JPEG, PNG and WebP files
+  zipSources: true, // add sources.csv (where each file came from, with any credit found) to ZIP files
+
+  // Prepare images before saving (see lib/prepare.js). The watermark logo is kept in local storage.
+  prepEnabled: false,
+  prepSize: 'none', // none | a key of SIZE_PRESETS | custom
+  prepWidth: 1200,
+  prepHeight: 1200,
+  prepFit: 'cover', // cover: crop to fill | contain: fit inside, padded with prepBackground
+  prepBackground: '#ffffff',
+  prepMaxKB: 0, // 0 = no target file size
+  prepWatermarkText: '',
+  prepWatermarkPosition: 'bottom-right',
+  prepWatermarkOpacity: 0.5,
+  prepWatermarkScale: 0.25, // share of the image width
 
   // UI
   theme: 'system',

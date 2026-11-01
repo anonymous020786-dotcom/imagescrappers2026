@@ -83,6 +83,22 @@
       </section>
 
       <section>
+        <h3>Main colour <span class="muted small">after Analyze</span></h3>
+        <div id="fColors" class="chips"></div>
+      </section>
+
+      <section>
+        <h3>Credit and licence</h3>
+        <select id="fRights" title="Details stated by the page, or by the file after Analyze">
+          <option value="any">Any</option>
+          <option value="known">Has credit or licence details</option>
+          <option value="open">Creative Commons or public domain</option>
+          <option value="none">No details found</option>
+        </select>
+        <p class="muted small hint">Shows what the page or file states. No details doesn't mean an image is free to use.</p>
+      </section>
+
+      <section>
         <h3>Found in</h3>
         <div id="fSources" class="chips"></div>
       </section>
@@ -118,6 +134,12 @@
         </div>
       </section>
 
+      <section>
+        <h3>This site</h3>
+        <p id="profileInfo" class="muted small hint"></p>
+        <button id="profileBtn" class="wide" title="Remember filters, file names and format for this website">Site profile…</button>
+      </section>
+
       <button id="resetFilters" class="wide">Reset filters</button>
     </aside>
 
@@ -132,6 +154,8 @@
         <span class="spacer"></span>
         <button id="analyze" title="Fetch every visible image to get exact size, dimensions, colour and fingerprint">Analyze</button>
         <button id="dupes" title="Find visually identical images (perceptual hash)">Find duplicates</button>
+        <button id="keepBest" class="hidden" title="In each group of duplicates, select the largest copy and deselect the others">Keep best</button>
+        <button id="similarClear" class="hidden" title="Back to all images">Similar images ✕</button>
         <button id="auditBtn" title="Accessibility and performance check of this page's images (missing alt text, oversized files, lazy loading…)">Audit</button>
         <div class="seg">
           <button id="viewGrid" title="Grid view">▦</button>
@@ -164,6 +188,9 @@
       </select>
     </label>
     <label class="muted small" title="Removes EXIF (camera, GPS location, dates), XMP and comments from JPEG, PNG and WebP downloads, on your device"><input id="stripMeta" type="checkbox"> Remove metadata</label>
+    <label class="muted small" title="Apply your size, file size and watermark choices to every download"><input id="prepOn" type="checkbox"> Prepare</label>
+    <button id="prepBtn" title="Choose an exact size, a target file size and a watermark">Prepare…</button>
+    <button id="namesBtn" title="Check the final file names before downloading">Names…</button>
     <div class="menu-wrap">
       <button id="saveBtn" title="Save the selected images to a collection (S)">★ Save ▾</button>
       <div id="saveMenu" class="menu hidden"></div>
@@ -177,6 +204,10 @@
         <button data-export="html">HTML gallery (.html)</button>
         <button data-export="pdf">PDF document (.pdf)…</button>
         <button data-export="sheet">Contact sheet (.png)</button>
+        <hr>
+        <button data-copy="markdown">Copy as Markdown</button>
+        <button data-copy="html">Copy as HTML</button>
+        <button data-copy="bbcode">Copy as BBCode</button>
       </div>
     </div>
     <button id="copyUrls" title="Copy selected URLs (Ctrl+C)">Copy URLs</button>
@@ -210,6 +241,8 @@
         <button id="lbEdit" title="Crop, rotate, flip or resize, then download or copy">Edit…</button>
         <button id="lbColours" title="Extract the main colours of this image">Colours</button>
         <button id="lbSave" title="Save this image to a collection">★ Save</button>
+        <button id="lbSimilar" title="Show the images that look most like this one">Find similar</button>
+        <button id="lbFrames" class="hidden" title="Save single frames of this GIF as PNG files">GIF frames…</button>
       </div>
       <section id="lbPalette" class="lb-exif hidden" aria-live="polite"></section>
       <section id="lbExif" class="lb-exif hidden" aria-live="polite"></section>
@@ -257,9 +290,13 @@
     <div class="drawer-head">
       <h3>Collections</h3>
       <button id="newCollection">+ New</button>
+      <button id="backupCollections" title="Save all collections to a file">Backup</button>
+      <button id="restoreCollections" title="Add the collections from a backup file">Restore</button>
       <button id="closeCollections">✕</button>
     </div>
+    <input id="collFile" type="file" accept=".json,application/json" class="hidden">
     <p class="muted small drawer-note">Saved on this device only. Collections keep image links, so pictures that are later removed from a website can stop loading.</p>
+    <input id="collSearch" class="drawer-search" type="search" placeholder="Search names, tags and notes">
     <div id="collectionsList"></div>
   </div>
 
@@ -272,6 +309,137 @@
         <button id="nameOk" value="ok" class="primary">Save</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="collDialog" class="import-dialog name-dialog">
+    <form method="dialog">
+      <h3 id="collTitle"></h3>
+      <label class="stacked">Tags, separated by commas
+        <input id="collTags" type="text" maxlength="400" autocomplete="off" placeholder="travel, client work">
+      </label>
+      <label class="stacked">Note
+        <textarea id="collNote" rows="4" maxlength="1000"></textarea>
+      </label>
+      <div class="import-row end">
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="ok" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="prepareDialog" class="import-dialog">
+    <div class="dialog-head">
+      <h3>Prepare images</h3>
+      <button id="prepClose" title="Save and close (Esc cancels)">✕</button>
+    </div>
+    <p class="muted small">Tick <b>Prepare</b> in the bottom bar to apply these to every download and ZIP. Done on your device. GIF and SVG files are saved unchanged unless you choose a conversion, and redrawn images lose their embedded metadata.</p>
+    <h4>Size</h4>
+    <div class="import-row">
+      <label>Size <select id="prepSize"></select></label>
+      <label id="prepCustom">Width <input id="prepWidth" type="number" min="16" max="10000"> Height <input id="prepHeight" type="number" min="16" max="10000"></label>
+    </div>
+    <div class="import-row">
+      <label>Fit
+        <select id="prepFit">
+          <option value="cover">Crop to fill</option>
+          <option value="contain">Fit inside, with a background</option>
+        </select>
+      </label>
+      <label id="prepBgWrap">Background <input id="prepBackground" type="color"></label>
+    </div>
+    <p class="muted small">An exact size can enlarge small images, which makes them softer.</p>
+    <h4>File size</h4>
+    <div class="import-row">
+      <label>Keep each file under <input id="prepMaxKB" type="number" min="0" max="100000" step="10"> KB</label>
+      <span class="muted small">0 = no limit. Lowers quality first, then dimensions. PNG can only shrink in dimensions.</span>
+    </div>
+    <h4>Your watermark</h4>
+    <div class="import-row">
+      <label class="grow">Text <input id="wmText" type="text" maxlength="120" autocomplete="off" placeholder="© Your name"></label>
+    </div>
+    <div class="import-row">
+      <label>Or logo <input id="wmLogo" type="file" accept="image/png,image/jpeg,image/webp"></label>
+      <span id="wmLogoInfo" class="muted small"></span>
+      <button id="wmLogoClear" class="hidden">Remove logo</button>
+    </div>
+    <div class="import-row">
+      <label>Position
+        <select id="wmPosition">
+          <option value="top-left">Top left</option>
+          <option value="top-right">Top right</option>
+          <option value="bottom-left">Bottom left</option>
+          <option value="bottom-right">Bottom right</option>
+          <option value="center">Centre</option>
+        </select>
+      </label>
+      <label>Opacity <input id="wmOpacity" type="range" min="0.1" max="1" step="0.05"></label>
+      <label>Size <input id="wmScale" type="range" min="0.05" max="0.8" step="0.05"></label>
+    </div>
+    <p class="muted small">Only add a watermark to images you have the right to change.</p>
+    <div class="prep-preview">
+      <img id="prepPreviewImg" class="checker hidden" alt="Preview of the prepared image">
+      <span id="prepPreviewInfo" class="muted small"></span>
+    </div>
+    <div class="import-row end">
+      <button id="prepPreview" title="Try these choices on the first selected image">Preview</button>
+      <button id="prepDone" class="primary">Done</button>
+    </div>
+  </dialog>
+
+  <dialog id="namesDialog" class="import-dialog audit-dialog">
+    <div class="dialog-head">
+      <h3>File names</h3>
+      <button id="rnClose" title="Close (Esc)">✕</button>
+    </div>
+    <div class="import-row">
+      <label class="grow">File name <input id="rnFile" type="text" spellcheck="false"></label>
+      <label class="grow">Folder <input id="rnFolder" type="text" spellcheck="false"></label>
+    </div>
+    <p class="muted small">Tokens: {name} {index} {index:3} {domain} {pagedomain} {title} {date} {time} {width} {height} {alt} {type} {source}</p>
+    <p id="rnSummary" class="small"></p>
+    <div id="rnList" class="audit-list"></div>
+    <div class="import-row end">
+      <button id="rnSave" class="primary">Use these names</button>
+    </div>
+  </dialog>
+
+  <dialog id="profileDialog" class="import-dialog name-dialog">
+    <div class="dialog-head">
+      <h3 id="pfTitle"></h3>
+      <button id="pfClose" title="Close (Esc)">✕</button>
+    </div>
+    <p class="muted small">Used whenever you scan this website or its subdomains, including Quick download. Saved on this device only.</p>
+    <label class="inline"><input id="pfFilters" type="checkbox"> Remember the current filters and sort order</label>
+    <label class="stacked">File name <input id="pfFile" type="text" spellcheck="false"></label>
+    <label class="stacked">Folder <input id="pfFolder" type="text" spellcheck="false"></label>
+    <label class="stacked">Convert to
+      <select id="pfFormat">
+        <option value="">Use my default</option>
+        <option value="original">Original</option>
+        <option value="png">PNG</option>
+        <option value="jpeg">JPEG</option>
+        <option value="webp">WebP</option>
+      </select>
+    </label>
+    <div class="import-row end">
+      <button id="pfRemove" class="danger hidden">Remove profile</button>
+      <button id="pfSave" class="primary">Save profile</button>
+    </div>
+  </dialog>
+
+  <dialog id="framesDialog" class="import-dialog audit-dialog">
+    <div class="dialog-head">
+      <h3>GIF frames</h3>
+      <button id="frClose" title="Close (Esc)">✕</button>
+    </div>
+    <p id="frNote" class="muted small"></p>
+    <div id="frGrid" class="frame-grid"></div>
+    <div class="import-row end">
+      <span id="frInfo" class="muted small spacer"></span>
+      <button id="frAll">Select all</button>
+      <button id="frNone">None</button>
+      <button id="frSave" class="primary">Save as PNG</button>
+    </div>
   </dialog>
 
   <dialog id="pdfDialog" class="import-dialog">
@@ -306,6 +474,14 @@
       <button id="auditClose" title="Close (Esc)">✕</button>
     </div>
     <p id="auditSummary" class="muted small"></p>
+    <div id="auditViewWrap" class="import-row hidden">
+      <label>Show
+        <select id="auditView">
+          <option value="image">Images</option>
+          <option value="page">Pages, biggest saving first</option>
+        </select>
+      </label>
+    </div>
     <div id="auditRules" class="chips"></div>
     <div id="auditList" class="audit-list"></div>
     <div class="import-row end">

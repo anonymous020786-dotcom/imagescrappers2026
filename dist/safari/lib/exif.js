@@ -2,6 +2,8 @@
 // Pure byte-level code (no browser APIs), unit-tested in Node. Every read is bounds-checked
 // because the bytes come from arbitrary websites.
 
+import { mergeRights, rightsFromIptc, rightsFromXmp } from './rights.js';
+
 const TYPE_SIZE = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
 const MAX_ENTRIES = 512;
 
@@ -233,6 +235,58 @@ export function readMetadata(input) {
     return null;
   }
   return { format, exif, hasXmp, hasText, metadataBytes };
+}
+
+const XMP_JPEG = 'http://ns.adobe.com/xap/1.0/\0';
+
+// iTXt: keyword, NUL, compression flag, method, language, NUL, translated keyword, NUL, text.
+function pngXmp(bytes, chunk) {
+  const end = chunk.data + chunk.size;
+  const keyword = 'XML:com.adobe.xmp\0';
+  if (!ascii(bytes, chunk.data, keyword) || bytes[chunk.data + keyword.length]) return '';
+  let at = chunk.data + keyword.length + 2;
+  for (let nulls = 0; nulls < 2 && at < end; at++) if (!bytes[at]) nulls++;
+  return new TextDecoder().decode(bytes.subarray(at, end));
+}
+
+// PNG tEXt notes people use for credit: keyword, NUL, text.
+function pngTextRights(bytes, chunk) {
+  const body = bytes.subarray(chunk.data, chunk.data + chunk.size);
+  const nul = body.indexOf(0);
+  if (nul < 1) return null;
+  const key = String.fromCharCode(...body.subarray(0, nul)).toLowerCase();
+  const value = new TextDecoder('latin1').decode(body.subarray(nul + 1));
+  if (key === 'copyright') return { copyright: value };
+  return key === 'author' ? { creator: value } : null;
+}
+
+// Creator, credit, copyright and licence stated in a JPEG, PNG or WebP file (XMP, IPTC, EXIF, PNG text); or null.
+export function readRights(input) {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const format = detectFormat(bytes);
+  const found = [];
+  try {
+    if (format === 'jpeg') {
+      for (const s of jpegSegments(bytes)?.segments ?? []) {
+        if (s.marker === 0xe1 && ascii(bytes, s.start + 4, XMP_JPEG)) {
+          found.push(rightsFromXmp(new TextDecoder().decode(bytes.subarray(s.start + 4 + XMP_JPEG.length, s.end))));
+        } else if (s.marker === 0xed) found.push(rightsFromIptc(bytes.subarray(s.start + 4, s.end)));
+      }
+    } else if (format === 'png') {
+      for (const c of pngChunks(bytes) ?? []) {
+        if (c.type === 'iTXt') found.push(rightsFromXmp(pngXmp(bytes, c)));
+        else if (c.type === 'tEXt') found.push(pngTextRights(bytes, c));
+      }
+    } else if (format === 'webp') {
+      for (const c of webpChunks(bytes) ?? []) {
+        if (c.fourcc === 'XMP ') found.push(rightsFromXmp(new TextDecoder().decode(bytes.subarray(c.data, c.data + c.size))));
+      }
+    } else return null;
+  } catch {
+    return null;
+  }
+  const exif = readMetadata(bytes)?.exif;
+  return mergeRights(...found, exif && { creator: exif.artist, copyright: exif.copyright });
 }
 
 function concat(parts, total) {

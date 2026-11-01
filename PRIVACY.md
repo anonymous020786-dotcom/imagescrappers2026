@@ -18,10 +18,12 @@ The extension saves the following in your browser's own extension storage, only 
 
 | Data | Where | Why |
 | --- | --- | --- |
-| Your settings (filters, file-name template, download options) | `chrome.storage.sync` | So your preferences are kept. If you use Chrome Sync, your browser syncs them to your own Google account, as it does for any extension settings. The developer cannot access them. |
+| Your settings (filters, file-name template, download options, watermark text) | `chrome.storage.sync` | So your preferences are kept. If you use Chrome Sync, your browser syncs them to your own Google account, as it does for any extension settings. The developer cannot access them. |
 | Scan history (page URL, title, and the image URLs found) | `chrome.storage.local` | Powers the History view. You can clear it there at any time and limit its size in the options. |
 | A list of image URLs you already downloaded | `chrome.storage.local` | Powers the optional "skip images I already downloaded" feature. |
 | Your collections (names, and the image and page URLs you saved to them) | `chrome.storage.local` | Powers Collections. Rename or delete them in the dashboard at any time. |
+| Your site profiles (website names with the filters and file names you saved for them) | `chrome.storage.local` | Powers site profiles. Remove them in the dashboard at any time. |
+| A watermark logo, if you add one | `chrome.storage.local` | Lets you reuse it. Remove it in the Prepare window at any time. |
 | Results of a bulk scrape or crawl in progress | `chrome.storage.local` | Hands the results from the crawler to the dashboard. |
 
 Removing the extension deletes all of this.
@@ -29,8 +31,8 @@ Removing the extension deletes all of this.
 ## Images you edit, inspect or audit
 
 The image editor (crop, rotate, flip, resize), **Photo info** (camera, date and GPS location stored in a photo),
-**Remove metadata**, the **image audit**, **colour palettes**, and **PDF and contact sheet** creation all work on
-your device. The images and anything read from them,
+**Remove metadata**, the **image audit**, **colour palettes**, **PDF and contact sheet** creation, the **licence and
+credit finder**, **Prepare** (sizes, file size, watermark) and **GIF frames** all work on your device. The images and anything read from them,
 including a photo's location, are not stored, logged or sent anywhere. Removing metadata only changes the copy you
 download; the original on the website is untouched.
 

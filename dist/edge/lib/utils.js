@@ -1,4 +1,5 @@
 // Pure helpers shared by the dashboard, background worker and unit tests.
+import { rightsClass } from './rights.js';
 
 export const IMAGE_TYPES = ['jpg', 'png', 'gif', 'webp', 'svg', 'avif', 'jxl', 'heic', 'bmp', 'ico', 'tiff', 'other'];
 
@@ -172,6 +173,7 @@ export function dedupe(images, ignoreQuery = false) {
       prev.height = Math.max(prev.height || 0, img.height || 0);
       prev.alt ||= img.alt;
       prev.audit ||= img.audit;
+      prev.rights ||= img.rights;
     }
   }
   return [...seen.values()];
@@ -246,6 +248,11 @@ export function filterImages(images, f) {
     if (f.minBytes && img.bytes != null && img.bytes < f.minBytes) return false;
     if (f.maxBytes && img.bytes != null && img.bytes > f.maxBytes) return false;
     if (f.domain && !hostFromUrl(img.url).includes(f.domain.toLowerCase())) return false;
+    if (f.colors?.length && !f.colors.includes(colorFamily(img.color))) return false;
+    if (f.rights && f.rights !== 'any') {
+      const kind = rightsClass(img.rights);
+      if (f.rights === 'known' ? kind === 'none' : kind !== f.rights) return false;
+    }
     if (blocked.length && matchesAny(img.url, blocked)) return false;
     if (f.hideDuplicates && img.duplicateOf) return false;
     if (f.selectedOnly && !img.selected) return false;
@@ -312,7 +319,7 @@ export function dHashFromGray(gray) {
 export function markVisualDuplicates(images, threshold = 5) {
   const hashed = images
     .filter((i) => i.hash)
-    .sort((a, b) => (b.width || 0) * (b.height || 0) - (a.width || 0) * (a.height || 0));
+    .sort((a, b) => (b.width || 0) * (b.height || 0) - (a.width || 0) * (a.height || 0) || (b.bytes ?? 0) - (a.bytes ?? 0));
   const kept = [];
   let groups = 0;
   for (const img of images) delete img.duplicateOf;
@@ -326,6 +333,61 @@ export function markVisualDuplicates(images, threshold = 5) {
     }
   }
   return groups;
+}
+
+// Groups marked by markVisualDuplicates: the best copy (largest, then heaviest) and the others.
+export function duplicateGroups(images) {
+  const byId = new Map(images.map((i) => [i.id, i]));
+  const groups = new Map();
+  for (const img of images) {
+    const best = img.duplicateOf ? byId.get(img.duplicateOf) : null;
+    if (!best) continue;
+    if (!groups.has(best)) groups.set(best, []);
+    groups.get(best).push(img);
+  }
+  return [...groups].map(([best, others]) => ({ best, others }));
+}
+
+// Images that look like `hash`, closest first. The target itself comes first (distance 0).
+export function rankSimilar(images, hash, maxDistance = 18) {
+  return images
+    .map((img) => ({ img, distance: hammingHex(hash, img.hash) }))
+    .filter((r) => r.distance <= maxDistance)
+    .sort((a, b) => a.distance - b.distance || (a.img.order ?? 0) - (b.img.order ?? 0))
+    .map((r) => r.img);
+}
+
+export const COLOR_FAMILIES = ['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'brown', 'black', 'gray', 'white'];
+
+// The everyday name for a colour such as #1a6fd0; null when it can't be read.
+export function colorFamily(hex) {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex ?? '');
+  if (!m) return null;
+  const [r, g, b] = m.slice(1).map((v) => parseInt(v, 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const light = (max + min) / 2;
+  const delta = max - min;
+  const sat = delta ? delta / (1 - Math.abs(2 * light - 1)) : 0;
+  if (light < 0.1) return 'black';
+  if (light > 0.93) return 'white';
+  if (sat < 0.14) return light < 0.25 ? 'black' : light > 0.8 ? 'white' : 'gray';
+  let hue = 0;
+  if (delta) {
+    if (max === r) hue = ((g - b) / delta + 6) % 6;
+    else if (max === g) hue = (b - r) / delta + 2;
+    else hue = (r - g) / delta + 4;
+    hue *= 60;
+  }
+  if (hue >= 15 && hue < 45 && light < 0.45) return 'brown';
+  if (hue < 15 || hue >= 340) return 'red';
+  if (hue < 42) return 'orange';
+  if (hue < 68) return 'yellow';
+  if (hue < 165) return 'green';
+  if (hue < 200) return 'teal';
+  if (hue < 255) return 'blue';
+  if (hue < 295) return 'purple';
+  return 'pink';
 }
 
 export function formatBytes(bytes) {
@@ -356,8 +418,8 @@ export function toCSV(images) {
 
 export function toJSON(images) {
   return JSON.stringify(
-    images.map(({ url, type, width, height, bytes, alt, title, sources, source, pageUrl, color, hash }) => ({
-      url, type, width, height, bytes, alt, title, sources: sources ?? [source], pageUrl, color, hash,
+    images.map(({ url, type, width, height, bytes, alt, title, sources, source, pageUrl, color, hash, rights }) => ({
+      url, type, width, height, bytes, alt, title, sources: sources ?? [source], pageUrl, color, hash, rights,
     })),
     null,
     2,
@@ -370,6 +432,30 @@ export function toText(images) {
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// Selected images as text to paste. Inline data: images are left out; returns { text, skipped }.
+export function toSnippet(images, format) {
+  const list = images.filter((i) => /^https?:/i.test(i.url));
+  const safe = (url) => url.replace(/[\s()[\]<>]/g, (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+  const line = {
+    markdown: (i) => `![${String(i.alt ?? '').replace(/[[\]\\]/g, '\\$&').replace(/\s+/g, ' ')}](${safe(i.url)})`,
+    html: (i) => `<img src="${escapeHtml(i.url)}" alt="${escapeHtml(i.alt)}"${i.width && i.height ? ` width="${i.width}" height="${i.height}"` : ''}>`,
+    bbcode: (i) => `[img]${safe(i.url)}[/img]`,
+  }[format];
+  return { text: list.map(line).join('\n'), skipped: images.length - list.length };
+}
+
+// Final paths for a list of images, marking names that collide (compared as Windows would, ignoring case).
+export function previewNames(images, nameOf) {
+  const rows = images.map((img, index) => ({ img, path: nameOf(img, index), clash: false }));
+  const seen = new Map();
+  for (const row of rows) {
+    const key = row.path.toLowerCase();
+    if (seen.has(key)) row.clash = seen.get(key).clash = true;
+    else seen.set(key, row);
+  }
+  return { rows, clashes: rows.filter((r) => r.clash).length };
 }
 
 export function toHTMLGallery(images, title = 'Image gallery') {

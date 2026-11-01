@@ -2,26 +2,31 @@ import { api, isScriptableUrl } from '../lib/browser.js';
 import { applyTheme, loadSettings, saveSettings } from '../lib/settings.js';
 import { callInTab, scanTab, scanTabs } from '../lib/scanner.js';
 import {
-  analyze, convert, copyImageToClipboard, fetchBlob, paletteOf, pdfImage, removeMetadata, renderContactSheet, resizeActive,
+  analyze, convert, copyImageToClipboard, fetchBlob, paletteOf, pdfImage, prepareImage, removeMetadata, renderContactSheet, resizeActive,
 } from '../lib/imaging.js';
+import { SIZE_PRESETS, planActive, planFromSettings } from '../lib/prepare.js';
+import { RIGHTS_LABELS, mergeRights, rightsClass, sourcesToCSV } from '../lib/rights.js';
+import { findProfile, loadProfiles, profileFilters, removeProfile, saveProfiles, setProfile, withProfile } from '../lib/profiles.js';
 import { buildPdf } from '../lib/pdf.js';
 import { sheetLayout } from '../lib/sheet.js';
 import { paletteToCSS, textColorFor } from '../lib/palette.js';
 import {
-  addImages, createCollection, deleteCollection, loadCollections, removeImages, renameCollection, saveCollections, sortCollections,
+  addImages, backupCollections, createCollection, deleteCollection, loadCollections, matchesCollection, removeImages, renameCollection,
+  restoreCollections, saveCollections, setCollectionDetails, sortCollections,
 } from '../lib/collections.js';
-import { readMetadata } from '../lib/exif.js';
-import { RULES, auditImages, auditToCSV } from '../lib/audit.js';
+import { readMetadata, readRights } from '../lib/exif.js';
+import { RULES, auditByPage, auditImages, auditToCSV, pageAuditToCSV } from '../lib/audit.js';
 import { openEditor } from './editor.js';
+import { canExtractFrames, openFrames } from './frames.js';
 import { ZipWriter } from '../lib/zip.js';
 import { DownloadLog, createGate, waitForDownload } from '../lib/downloader.js';
 import { applyRefererRules } from '../lib/referer.js';
 import { NEEDS_ACCESS, access, explainScanError, mountAccessBanner, onAccessChange, refreshAccess, requestAllSites } from '../lib/access.js';
 import { extractUrls, sleep, withRetry } from '../lib/crawl.js';
 import {
-  IMAGE_TYPES, applyTemplate, aspectOf, baseNameFromUrl, buildFilename, dedupe, extensionFromUrl,
-  filterImages, formatBytes, guessType, hostFromUrl, mapLimit, markVisualDuplicates, normalizeUrl, reverseSearchUrl,
-  safeImageSrc, sortImages, toCSV, toHTMLGallery, toJSON, toText,
+  COLOR_FAMILIES, IMAGE_TYPES, applyTemplate, aspectOf, baseNameFromUrl, buildFilename, colorFamily, dedupe, duplicateGroups, extensionFromUrl,
+  filterImages, formatBytes, guessType, hostFromUrl, mapLimit, markVisualDuplicates, normalizeUrl, previewNames, rankSimilar, reverseSearchUrl,
+  safeImageSrc, sortImages, toCSV, toHTMLGallery, toJSON, toSnippet, toText,
 } from '../lib/utils.js';
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +37,10 @@ const SOURCE_LABELS = {
   svg: 'inline SVG', canvas: 'canvas', poster: 'video poster', link: 'linked', meta: 'meta/og', icon: 'favicon', network: 'network',
   script: 'in scripts', sitemap: 'sitemap', direct: 'direct URL', generated: 'generated', imported: 'imported',
 };
+const COLOR_LABELS = Object.fromEntries(COLOR_FAMILIES.map((c) => [c, c[0].toUpperCase() + c.slice(1)]));
+const LOGO_KEY = 'watermark-logo';
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+const MAX_NAME_ROWS = 300;
 const PAGE_SIZE = 400;
 const HISTORY_KEY = 'history';
 const FILTER_STORE = 'dashboard-filters';
@@ -54,6 +63,11 @@ const state = {
   historyId: null,
   types: new Set(),
   sources: new Set(),
+  colors: new Set(),
+  similar: null, // { hash, name }: showing images that look like this one
+  profile: null, // the site profile in use
+  wmLogo: null, // decoded watermark logo
+  prepMissed: 0, // images that couldn't reach the target file size in this run
   rendered: 0,
   gate: createGate(),
 };
@@ -185,6 +199,8 @@ function readFilters() {
     maxBytes: num('fMaxKB') * 1024,
     types: [...state.types],
     sources: [...state.sources],
+    colors: [...state.colors],
+    rights: $('fRights').value,
     domain: $('fDomain').value,
     hideDuplicates: $('fHideDupes').checked,
     selectedOnly: $('fSelectedOnly').checked,
@@ -207,6 +223,8 @@ function writeFilters(f) {
   $('fMaxKB').value = f.maxBytes ? Math.round(f.maxBytes / 1024) : '';
   state.types = new Set(f.types ?? []);
   state.sources = new Set(f.sources ?? []);
+  state.colors = new Set(f.colors ?? []);
+  $('fRights').value = f.rights || 'any';
   $('fHideDupes').checked = !!f.hideDuplicates;
   $('fSelectedOnly').checked = !!f.selectedOnly;
   $('sortKey').value = f.sortKey || 'order';
@@ -245,14 +263,19 @@ function renderFacets() {
   const typeCounts = {};
   const sourceCounts = {};
   const domains = {};
+  const colorCounts = {};
   for (const img of state.images) {
     typeCounts[img.type] = (typeCounts[img.type] ?? 0) + 1;
+    const family = colorFamily(img.color);
+    if (family) colorCounts[family] = (colorCounts[family] ?? 0) + 1;
     for (const s of img.sources ?? [img.source]) sourceCounts[s] = (sourceCounts[s] ?? 0) + 1;
     const d = hostFromUrl(img.url) || 'inline (data URI)';
     domains[d] = (domains[d] ?? 0) + 1;
   }
   renderChips('fTypes', IMAGE_TYPES, state.types, null, typeCounts);
   renderChips('fSources', SOURCES, state.sources, SOURCE_LABELS, sourceCounts);
+  renderChips('fColors', COLOR_FAMILIES, state.colors, COLOR_LABELS, colorCounts);
+  if (!$('fColors').querySelector('.chip')) $('fColors').innerHTML = '<span class="muted small">Click Analyze to filter by colour</span>';
 
   const sel = $('fDomain');
   const current = sel.value;
@@ -336,6 +359,13 @@ function buildCard(img, index) {
     b.textContent = 'duplicate';
     card.append(b);
   }
+  if (img.rights) {
+    const r = document.createElement('span');
+    r.className = 'rights';
+    r.textContent = rightsClass(img.rights) === 'open' ? 'CC' : '©';
+    r.title = Object.entries(RIGHTS_LABELS).filter(([key]) => img.rights[key]).map(([key, label]) => `${label}: ${img.rights[key]}`).join('\n');
+    card.append(r);
+  }
   return card;
 }
 
@@ -343,10 +373,13 @@ async function render() {
   // Install Referer rules before any thumbnail request goes out.
   await ensureReferer();
   const f = readFilters();
-  storeSet(FILTER_STORE, f);
+  if (!state.profile) storeSet(FILTER_STORE, f); // a profile's filters belong to that site
   const filtered = filterImages(state.images, { ...f, blocklist: [] });
-  state.view = sortImages(filtered, f.sortKey, f.sortDir);
+  state.view = state.similar ? rankSimilar(filtered, state.similar.hash) : sortImages(filtered, f.sortKey, f.sortDir);
   renderFacets();
+  $('keepBest').classList.toggle('hidden', !state.images.some((i) => i.duplicateOf));
+  $('similarClear').classList.toggle('hidden', !state.similar);
+  if (state.similar) $('similarClear').textContent = `Like ${state.similar.name} ✕`;
 
   // Render in pages so tens of thousands of results stay responsive; more
   // cards are appended as the user scrolls near the end.
@@ -490,6 +523,7 @@ function mergeImages(fresh) {
       color: old.color,
       webpBytes: old.webpBytes,
       duplicateOf: old.duplicateOf,
+      rights: mergeRights(img.rights, old.rights) ?? undefined,
       type: old.bytes != null ? old.type : img.type,
       width: Math.max(img.width || 0, old.width || 0),
       height: Math.max(img.height || 0, old.height || 0),
@@ -619,6 +653,8 @@ async function followTab(tab) {
   state.images = [];
   state.lastClicked = -1;
   state.historyId = null;
+  state.similar = null;
+  await applyProfile();
   if (!isScriptableUrl(tab.url)) {
     setSource('This page cannot be scanned');
     render();
@@ -646,6 +682,8 @@ async function setupPanel() {
 function loadImported(images, title) {
   state.mode = 'import';
   state.live = false;
+  state.similar = null;
+  applyProfile();
   state.images = [];
   mergeImages(images.map((img, i) => ({
     source: 'imported', width: 0, height: 0, alt: '', pageUrl: '', ...img,
@@ -723,7 +761,7 @@ async function saveHistory(title, url) {
     images: state.images
       .filter((i) => !i.url.startsWith('data:'))
       .slice(0, settings.historyImageLimit || Infinity)
-      .map(({ url: u, type, width, height, alt, source, sources, pageUrl, bytes }) => ({ url: u, type, width, height, alt, source, sources, pageUrl, bytes })),
+      .map(({ url: u, type, width, height, alt, source, sources, pageUrl, bytes, rights }) => ({ url: u, type, width, height, alt, source, sources, pageUrl, bytes, rights })),
   };
   const next = [entry, ...history.filter((h) => h.id !== entry.id)].slice(0, settings.historyLimit);
   await api.storage.local.set({ [HISTORY_KEY]: next }).catch(() => {});
@@ -744,6 +782,8 @@ async function showHistory() {
     row.onclick = () => {
       state.mode = 'history';
       state.live = false;
+      state.similar = null;
+      applyProfile();
       state.images = h.images.map((i, n) => ({ ...i, id: `${h.id}-${n}`, order: n, tabId: null }));
       state.historyId = h.id;
       setSource(`History: ${h.title} (${new Date(h.time).toLocaleString()})`);
@@ -766,7 +806,7 @@ $('clearHistory').onclick = async () => {
 // ---------------------------------------------------------- analyze / dupes
 
 async function analyzeImages(list, label) {
-  const todo = list.filter((i) => i.bytes == null);
+  const todo = list.filter((i) => i.bytes == null || !i.hash);
   if (!todo.length) return 0;
   await ensureReferer();
   const signal = startTask(label);
@@ -800,20 +840,46 @@ $('dupes').onclick = async () => {
   toast(n ? `${n} visual duplicates found. Tick "Hide visual duplicates" to hide them.` : 'No visual duplicates found');
 };
 
+$('keepBest').onclick = () => {
+  const groups = duplicateGroups(state.images);
+  for (const { best, others } of groups) {
+    best.selected = true;
+    for (const img of others) img.selected = false;
+  }
+  render();
+  toast(`Selected the best copy in ${groups.length} group${groups.length === 1 ? '' : 's'} of duplicates`);
+};
+
+$('similarClear').onclick = () => {
+  state.similar = null;
+  render();
+};
+
 // --------------------------------------------------------------- downloads
 
-function filenameFor(img, index, now, convertTo) {
-  return buildFilename(settings.filenameTemplate, settings.folderTemplate, {
+// Settings with this site's profile applied.
+const config = () => withProfile(settings, state.profile);
+
+function filenameFor(img, index, now, convertTo, names = config()) {
+  return buildFilename(names.filenameTemplate, names.folderTemplate, {
     ...img, index, date: now, ext: extFor(img, convertTo), title: img.pageTitle, pageUrl: img.pageUrl,
   });
 }
 
-// True when downloads must be fetched and re-encoded (format change or resize).
+const prepPlan = () => planFromSettings(settings, state.wmLogo);
+const prepActive = () => Boolean(settings.prepEnabled) && planActive(prepPlan());
+
+// True when downloads must be fetched and re-encoded (format change, resize or Prepare).
 function needsProcessing(convertTo) {
-  return convertTo !== 'original' || resizeActive(settings);
+  return convertTo !== 'original' || resizeActive(settings) || prepActive();
 }
 
-function processBlob(blob, convertTo) {
+async function processBlob(blob, convertTo) {
+  if (prepActive()) {
+    const { blob: out, met } = await prepareImage(blob, convertTo, prepPlan(), settings.jpegQuality);
+    if (!met) state.prepMissed++;
+    return out;
+  }
   return convert(blob, convertTo, settings.jpegQuality, {
     maxWidth: Number(settings.resizeMaxWidth) || 0, maxHeight: Number(settings.resizeMaxHeight) || 0,
   });
@@ -860,6 +926,7 @@ async function downloadSelected() {
   const { queue, log, skipped } = await prepareQueue(list);
   if (!queue.length) return toast(`All ${list.length.toLocaleString()} images were downloaded before (skipped)`);
   const signal = startTask('Downloading');
+  state.prepMissed = 0;
   let done = 0;
   const failed = [];
   await mapLimit(queue, settings.concurrency, async (img) => {
@@ -890,6 +957,7 @@ async function downloadSelected() {
   const parts = [`Downloaded ${(queue.length - failed.length).toLocaleString()}`];
   if (skipped) parts.push(`skipped ${skipped.toLocaleString()} already downloaded`);
   if (failed.length) parts.push(`${failed.length.toLocaleString()} failed after ${settings.retries + 1} attempts`);
+  if (state.prepMissed) parts.push(`${state.prepMissed.toLocaleString()} over the target file size`);
   toast(parts.join(' · '), 5000);
 }
 
@@ -904,10 +972,13 @@ async function downloadZip() {
   const { queue, log, skipped } = await prepareQueue(list);
   if (!queue.length) return toast(`All ${list.length.toLocaleString()} images were downloaded before (skipped)`);
   const signal = startTask('Packing ZIP');
+  state.prepMissed = 0;
+  const names = config();
   const first = queue[0];
   const baseName = applyTemplate(settings.zipName, { ...first, index: 0, date: now, pageUrl: first.pageUrl, title: first.pageTitle });
-  const folder = applyTemplate(settings.folderTemplate.split('/')[0] || '', { ...first, date: now, pageUrl: first.pageUrl });
+  const folder = applyTemplate(names.folderTemplate.split('/')[0] || '', { ...first, date: now, pageUrl: first.pageUrl });
   const failures = [];
+  let sources = [];
   let zip = new ZipWriter();
   let part = 1;
   let packed = 0;
@@ -917,6 +988,8 @@ async function downloadZip() {
   const flush = async (last) => {
     if (!zip.count) return;
     if (last && failures.length) zip.add('failed-urls.txt', new TextEncoder().encode(failures.join('\n')), now);
+    if (settings.zipSources && sources.length) zip.add('sources.csv', new TextEncoder().encode(sourcesToCSV(sources, now)), now);
+    sources = [];
     const single = last && part === 1;
     const name = `${folder ? `${folder}/` : ''}${baseName}${single ? '' : `_part${String(part).padStart(2, '0')}`}.zip`;
     await saveBlob(new Blob([zip.finish()], { type: 'application/zip' }), name);
@@ -947,8 +1020,9 @@ async function downloadZip() {
       if (!(blob instanceof Blob)) continue;
       if (zip.offset + blob.size > partLimit) await flush(false);
       const img = batch[i];
-      const name = applyTemplate(settings.filenameTemplate, { ...img, index: list.indexOf(img), date: now, pageUrl: img.pageUrl, title: img.pageTitle });
-      zip.add(`${name}.${extFor(img, convertTo)}`, new Uint8Array(await blob.arrayBuffer()), now);
+      const name = applyTemplate(names.filenameTemplate, { ...img, index: list.indexOf(img), date: now, pageUrl: img.pageUrl, title: img.pageTitle });
+      const file = zip.add(`${name}.${extFor(img, convertTo)}`, new Uint8Array(await blob.arrayBuffer()), now);
+      sources.push({ file, img });
       log.add(img.url);
       packed++;
     }
@@ -961,6 +1035,7 @@ async function downloadZip() {
     parts.length > 1 ? `${parts.length} parts` : '',
     skipped ? `${skipped.toLocaleString()} skipped (downloaded before)` : '',
     failures.length ? `${failures.length.toLocaleString()} failed, listed in failed-urls.txt` : '',
+    state.prepMissed ? `${state.prepMissed.toLocaleString()} over the target file size` : '',
   ].filter(Boolean).join(' · ');
   toast(`ZIP saved with ${packed.toLocaleString()} images${extra ? ` (${extra})` : ''}`, 5000);
 }
@@ -991,8 +1066,15 @@ document.addEventListener('click', () => {
 });
 $('exportMenu').onclick = async (e) => {
   const fmt = e.target.dataset.export;
-  if (!fmt) return;
+  const snippet = e.target.dataset.copy;
+  if (!fmt && !snippet) return;
   const list = targetForAction().length ? targetForAction() : state.view;
+  if (snippet) {
+    const { text, skipped } = toSnippet(list, snippet);
+    if (!text) return toast('Only images with a web address can be copied as code');
+    await navigator.clipboard.writeText(text);
+    return toast(`Copied ${(list.length - skipped).toLocaleString()} images${skipped ? ` (${skipped} inline images left out)` : ''}`);
+  }
   if (fmt === 'pdf') return openPdfDialog(list);
   if (fmt === 'sheet') {
     if (!(await needAllSites())) return;
@@ -1057,6 +1139,7 @@ function openLightbox(index) {
     ['Domain', hostFromUrl(img.url) || 'inline data'],
     ['Page', img.pageUrl ?? '—'],
     ['URL', img.url.length > 400 ? `${img.url.slice(0, 400)}…` : img.url],
+    ...Object.entries(RIGHTS_LABELS).filter(([key]) => img.rights?.[key]).map(([key, label]) => [label, img.rights[key]]),
   ];
   const dl = $('lbMeta');
   dl.replaceChildren();
@@ -1069,6 +1152,7 @@ function openLightbox(index) {
   }
   $('lbSelect').textContent = img.selected ? 'Deselect' : 'Select';
   $('lbHighlight').disabled = img.tabId == null;
+  $('lbFrames').classList.toggle('hidden', img.type !== 'gif' || !canExtractFrames());
   for (const id of ['lbExif', 'lbPalette']) {
     $(id).classList.add('hidden');
     $(id).replaceChildren();
@@ -1202,7 +1286,7 @@ function el(tag, className, text) {
   return node;
 }
 
-function showPhotoInfo(meta) {
+function showPhotoInfo(meta, rights) {
   const box = $('lbExif');
   box.replaceChildren(el('h4', '', 'Photo info'));
   if (!meta) {
@@ -1225,6 +1309,14 @@ function showPhotoInfo(meta) {
       box.append(el('p', 'muted small', `Metadata: ${formatBytes(meta.metadataBytes)}${extras.length ? ` (includes ${extras.join(' and ')})` : ''}.`));
     }
   }
+  if (rights) {
+    const e = meta?.exif ?? {};
+    const dl = el('dl');
+    for (const [key, label] of Object.entries(RIGHTS_LABELS)) {
+      if (rights[key] && rights[key] !== e.artist && rights[key] !== e.copyright) dl.append(el('dt', '', label), el('dd', '', rights[key]));
+    }
+    box.append(dl, el('p', 'muted small', 'Credit and licence are shown as stated. Check them before reusing an image.'));
+  }
   box.classList.remove('hidden');
 }
 
@@ -1234,9 +1326,36 @@ $('lbInfo').onclick = async () => {
   try {
     const blob = await fetchBlob(img);
     if (lbImage() !== img) return;
-    showPhotoInfo(readMetadata(await blob.arrayBuffer()));
+    const bytes = await blob.arrayBuffer();
+    img.rights = mergeRights(img.rights, readRights(bytes)) ?? undefined;
+    showPhotoInfo(readMetadata(bytes), img.rights);
   } catch (err) {
     toast(`Could not read the file: ${err.message}`);
+  }
+};
+
+$('lbSimilar').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  closeLightbox();
+  await analyzeImages(state.images, 'Comparing images');
+  if (!img.hash) return toast('This image could not be compared');
+  state.similar = { hash: img.hash, name: baseNameFromUrl(img.url).slice(0, 30) };
+  render();
+};
+
+$('lbFrames').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  try {
+    const folder = applyTemplate(config().folderTemplate, { ...img, date: new Date(), title: img.pageTitle });
+    await openFrames(await fetchBlob(img), {
+      name: baseNameFromUrl(img.url),
+      saveBlob: (blob, name) => saveBlob(blob, folder ? `${folder}/${name}` : name),
+      toast,
+    });
+  } catch (err) {
+    toast(`Could not read the frames: ${err.message}`);
   }
 };
 
@@ -1269,7 +1388,10 @@ $('lbEdit').onclick = async () => {
 // ------------------------------------------------------------------ audit
 
 let auditReport = null;
+let auditPages = [];
 let auditRule = '';
+let auditPage = ''; // show only this page's images
+let auditView = 'image'; // image | page
 
 function auditTargets() {
   return state.images.filter((i) => i.pageUrl || i.tabId != null);
@@ -1281,8 +1403,23 @@ function renderAudit() {
   $('auditSummary').textContent = report.total
     ? `${report.withIssues.toLocaleString()} of ${report.total.toLocaleString()} images have findings${saving}.`
     : 'No images to check. Scan a page first.';
+  auditPages = auditByPage(report);
+  $('auditViewWrap').classList.toggle('hidden', auditPages.length < 2);
+  if (auditPages.length < 2) auditView = 'image';
+  $('auditView').value = auditView;
   const chips = $('auditRules');
   chips.replaceChildren();
+  chips.classList.toggle('hidden', auditView === 'page');
+  if (auditView === 'page') return renderAuditPages();
+  if (auditPage) {
+    const chip = el('button', 'chip on', `${hostFromUrl(auditPage)}${safePath(auditPage)} ✕`);
+    chip.title = 'Show every page';
+    chip.onclick = () => {
+      auditPage = '';
+      renderAudit();
+    };
+    chips.append(chip);
+  }
   const ruleIds = Object.keys(RULES).filter((id) => report.byRule[id]?.count);
   if (auditRule && !ruleIds.includes(auditRule)) auditRule = '';
   for (const id of ['', ...ruleIds]) {
@@ -1296,7 +1433,7 @@ function renderAudit() {
   }
   const list = $('auditList');
   list.replaceChildren();
-  const items = report.items.filter((it) => !auditRule || it.issues.some((x) => x.rule === auditRule));
+  const items = report.items.filter((it) => (!auditRule || it.issues.some((x) => x.rule === auditRule)) && (!auditPage || it.img.pageUrl === auditPage));
   for (const { img, issues } of items.slice(0, 500)) {
     const row = el('div', 'audit-item');
     const thumb = el('img', 'checker');
@@ -1330,8 +1467,51 @@ function renderAudit() {
   $('auditCsv').disabled = !report.withIssues;
 }
 
+function safePath(url) {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return '';
+  }
+}
+
+function renderAuditPages() {
+  const list = $('auditList');
+  list.replaceChildren();
+  for (const p of auditPages.slice(0, 500)) {
+    const row = el('div', 'audit-item');
+    const body = el('div', 'body');
+    const counts = [
+      `${p.images.toLocaleString()} image${p.images === 1 ? '' : 's'}`,
+      p.errors && `${p.errors} error${p.errors === 1 ? '' : 's'}`,
+      p.warnings && `${p.warnings} warning${p.warnings === 1 ? '' : 's'}`,
+      p.notes && `${p.notes} note${p.notes === 1 ? '' : 's'}`,
+      p.savingBytes && `about ${formatBytes(p.savingBytes)} to save`,
+    ].filter(Boolean).join(' · ');
+    body.append(el('span', 'url', p.title || p.page), el('span', 'url muted', p.page), el('span', '', counts));
+    row.append(body);
+    row.title = 'Show the findings for this page';
+    row.onclick = () => {
+      auditPage = p.page;
+      auditView = 'image';
+      renderAudit();
+    };
+    list.append(row);
+  }
+  if (auditPages.length > 500) list.append(el('p', 'muted small', `…and ${auditPages.length - 500} more (all included in the CSV).`));
+  if (!auditPages.length) list.append(el('p', 'muted small', 'Nothing to report.'));
+  $('auditCsv').disabled = !auditPages.length;
+}
+
+$('auditView').onchange = () => {
+  auditView = $('auditView').value;
+  auditPage = '';
+  renderAudit();
+};
+
 $('auditBtn').onclick = () => {
   auditRule = '';
+  auditPage = '';
   renderAudit();
   $('auditDialog').showModal();
 };
@@ -1339,7 +1519,8 @@ $('auditClose').onclick = () => $('auditDialog').close();
 $('auditCsv').onclick = () => {
   if (!auditReport) return;
   const name = applyTemplate('{pagedomain}_{date}_image-audit', { url: '', pageUrl: state.tab?.url ?? auditReport.items[0]?.img.pageUrl });
-  saveBlob(new Blob([auditToCSV(auditReport)], { type: 'text/csv' }), `${name}.csv`);
+  const csv = auditView === 'page' ? pageAuditToCSV(auditPages) : auditToCSV(auditReport);
+  saveBlob(new Blob([csv], { type: 'text/csv' }), `${name}${auditView === 'page' ? '-pages' : ''}.csv`);
 };
 $('auditMeasure').onclick = async () => {
   if (!(await needAllSites())) return;
@@ -1447,6 +1628,238 @@ async function createContactSheet(list) {
   toast(layout.sheets.length > 1 ? `${layout.sheets.length} contact sheets saved` : 'Contact sheet saved');
 }
 
+// ---------------------------------------------------------------- prepare
+
+function fillPrepare() {
+  const box = $('prepSize');
+  if (!box.options.length) {
+    box.append(new Option('Keep the size', 'none'));
+    for (const [id, preset] of Object.entries(SIZE_PRESETS)) box.append(new Option(preset.label, id));
+    box.append(new Option('Custom size', 'custom'));
+  }
+  box.value = settings.prepSize;
+  $('prepWidth').value = settings.prepWidth;
+  $('prepHeight').value = settings.prepHeight;
+  $('prepFit').value = settings.prepFit;
+  $('prepBackground').value = settings.prepBackground;
+  $('prepMaxKB').value = settings.prepMaxKB;
+  $('wmText').value = settings.prepWatermarkText;
+  $('wmPosition').value = settings.prepWatermarkPosition;
+  $('wmOpacity').value = settings.prepWatermarkOpacity;
+  $('wmScale').value = settings.prepWatermarkScale;
+  syncPrepare();
+}
+
+function syncPrepare() {
+  const none = $('prepSize').value === 'none';
+  $('prepCustom').classList.toggle('hidden', $('prepSize').value !== 'custom');
+  $('prepFit').disabled = none;
+  $('prepBgWrap').classList.toggle('hidden', none || $('prepFit').value !== 'contain');
+  $('wmLogoInfo').textContent = state.wmLogo ? `Logo in use (${state.wmLogo.width} × ${state.wmLogo.height}), replaces the text` : '';
+  $('wmLogoClear').classList.toggle('hidden', !state.wmLogo);
+}
+
+async function savePrepare() {
+  settings = await saveSettings({
+    prepSize: $('prepSize').value,
+    prepWidth: num('prepWidth') || settings.prepWidth,
+    prepHeight: num('prepHeight') || settings.prepHeight,
+    prepFit: $('prepFit').value,
+    prepBackground: $('prepBackground').value,
+    prepMaxKB: num('prepMaxKB'),
+    prepWatermarkText: $('wmText').value.trim(),
+    prepWatermarkPosition: $('wmPosition').value,
+    prepWatermarkOpacity: Number($('wmOpacity').value),
+    prepWatermarkScale: Number($('wmScale').value),
+  });
+}
+
+async function loadLogo() {
+  const stored = await api.storage.local.get(LOGO_KEY).catch(() => ({}));
+  if (!stored?.[LOGO_KEY]) return;
+  state.wmLogo = await fetch(stored[LOGO_KEY]).then((r) => r.blob()).then(createImageBitmap).catch(() => null);
+}
+
+$('prepBtn').onclick = () => {
+  fillPrepare();
+  $('prepareDialog').showModal();
+};
+for (const id of ['prepSize', 'prepFit']) $(id).addEventListener('change', syncPrepare);
+$('prepClose').onclick = $('prepDone').onclick = async () => {
+  await savePrepare();
+  $('prepareDialog').close();
+  // Choosing something here means the user wants it used.
+  if (planActive(prepPlan()) && !settings.prepEnabled) {
+    settings = await saveSettings({ prepEnabled: true });
+    $('prepOn').checked = true;
+    toast('Prepare is on for your next downloads');
+  }
+};
+$('prepOn').onchange = async () => {
+  settings = await saveSettings({ prepEnabled: $('prepOn').checked });
+  if (settings.prepEnabled && !planActive(prepPlan())) $('prepBtn').click();
+};
+$('wmLogo').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (file.size > MAX_LOGO_BYTES) {
+    $('wmLogoInfo').textContent = 'That logo is larger than 2 MB';
+    return;
+  }
+  try {
+    state.wmLogo = await createImageBitmap(file);
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    await api.storage.local.set({ [LOGO_KEY]: dataUrl });
+    syncPrepare();
+  } catch {
+    $('wmLogoInfo').textContent = 'That file could not be read as an image';
+  }
+};
+$('wmLogoClear').onclick = async () => {
+  state.wmLogo = null;
+  await api.storage.local.remove(LOGO_KEY);
+  syncPrepare();
+};
+$('prepPreview').onclick = async () => {
+  const img = targetForAction()[0] ?? state.view[0];
+  const info = $('prepPreviewInfo');
+  if (!img) {
+    info.textContent = 'Scan a page first';
+    return;
+  }
+  if (!(await requestAllSites())) {
+    info.textContent = NEEDS_ACCESS;
+    return;
+  }
+  await savePrepare();
+  info.textContent = 'Working…';
+  try {
+    await ensureReferer();
+    const { blob, met } = await prepareImage(await fetchBlob(img), $('convertTo').value, prepPlan(), settings.jpegQuality);
+    const preview = $('prepPreviewImg');
+    URL.revokeObjectURL(preview.src);
+    preview.src = URL.createObjectURL(blob);
+    await preview.decode();
+    preview.classList.remove('hidden');
+    info.textContent = `${preview.naturalWidth} × ${preview.naturalHeight} px · ${formatBytes(blob.size)}${met ? '' : ' · could not reach the target file size'}`;
+  } catch (err) {
+    info.textContent = `Could not prepare this image: ${err.message}`;
+  }
+};
+
+// ------------------------------------------------------------------ names
+
+let nameList = [];
+
+function renderNames() {
+  const now = new Date();
+  const convertTo = $('convertTo').value;
+  const names = { filenameTemplate: $('rnFile').value, folderTemplate: $('rnFolder').value };
+  const { rows, clashes } = previewNames(nameList, (img, i) => filenameFor(img, i, now, convertTo, names));
+  $('rnSummary').textContent = clashes
+    ? `${clashes.toLocaleString()} of ${rows.length.toLocaleString()} names clash, so they would be numbered, overwritten or asked about, depending on your settings. Add {index} to keep them apart.`
+    : `${rows.length.toLocaleString()} files, no name clashes.`;
+  const list = $('rnList');
+  list.replaceChildren();
+  // Clashes first, so they can't be hidden past the row limit.
+  for (const row of [...rows].sort((a, b) => b.clash - a.clash).slice(0, MAX_NAME_ROWS)) {
+    const item = el('div', `name-row${row.clash ? ' clash' : ''}`);
+    const from = baseNameFromUrl(row.img.url);
+    item.append(el('span', 'muted', from), el('span', 'path', row.path));
+    item.title = row.path;
+    list.append(item);
+  }
+  if (rows.length > MAX_NAME_ROWS) list.append(el('p', 'muted small', `…and ${(rows.length - MAX_NAME_ROWS).toLocaleString()} more.`));
+}
+
+$('namesBtn').onclick = () => {
+  nameList = targetForAction().length ? targetForAction() : state.view;
+  if (!nameList.length) return toast('No images to name');
+  const names = config();
+  $('rnFile').value = names.filenameTemplate;
+  $('rnFolder').value = names.folderTemplate;
+  renderNames();
+  $('namesDialog').showModal();
+};
+$('rnFile').oninput = $('rnFolder').oninput = debounce(renderNames, 150);
+$('rnClose').onclick = () => $('namesDialog').close();
+$('rnSave').onclick = async () => {
+  const names = { filenameTemplate: $('rnFile').value.trim() || '{name}', folderTemplate: $('rnFolder').value.trim() };
+  if (state.profile) {
+    const { host, ...profile } = state.profile;
+    await saveProfiles(setProfile(await loadProfiles(), host, { ...profile, ...names }));
+    state.profile = { ...state.profile, ...names };
+  } else settings = await saveSettings(names);
+  $('namesDialog').close();
+  toast(state.profile ? `Names saved for ${state.profile.host}` : 'Names saved');
+};
+
+// ---------------------------------------------------------- site profiles
+
+const currentHost = () => (state.mode === 'tab' ? hostFromUrl(state.tab?.url) : '');
+
+function showProfile() {
+  const host = currentHost();
+  $('profileBtn').disabled = !host;
+  $('profileInfo').textContent = state.profile
+    ? `Using the profile for ${state.profile.host}`
+    : host ? `No profile for ${host}` : 'Available when scanning a web page';
+}
+
+// Uses the saved profile of the scanned website, or goes back to the usual filters when there is none.
+async function applyProfile() {
+  const url = state.mode === 'tab' ? state.tab?.url : '';
+  const profile = url ? findProfile(await loadProfiles(), url) : null;
+  const had = state.profile;
+  state.profile = profile;
+  if (profile?.filters) writeFilters({ ...defaultFilters(), ...profile.filters });
+  else if (had?.filters) writeFilters({ ...defaultFilters(), ...(storeGet(FILTER_STORE) ?? {}) });
+  $('convertTo').value = profile?.convertTo || settings.convertTo;
+  showProfile();
+}
+
+$('profileBtn').onclick = () => {
+  const p = state.profile;
+  $('pfTitle').textContent = `Profile for ${p?.host ?? currentHost()}`;
+  $('pfFilters').checked = p ? Boolean(p.filters) : true;
+  $('pfFile').value = p?.filenameTemplate ?? '';
+  $('pfFile').placeholder = settings.filenameTemplate;
+  $('pfFolder').value = p?.folderTemplate ?? '';
+  $('pfFolder').placeholder = settings.folderTemplate;
+  $('pfFormat').value = p?.convertTo ?? '';
+  $('pfRemove').classList.toggle('hidden', !p);
+  $('profileDialog').showModal();
+};
+$('pfClose').onclick = () => $('profileDialog').close();
+$('pfSave').onclick = async () => {
+  const host = state.profile?.host ?? currentHost();
+  const profile = {
+    filters: $('pfFilters').checked ? profileFilters(readFilters()) : undefined,
+    filenameTemplate: $('pfFile').value.trim(),
+    folderTemplate: $('pfFolder').value.trim(),
+    convertTo: $('pfFormat').value,
+  };
+  await saveProfiles(setProfile(await loadProfiles(), host, profile));
+  state.profile = { host, ...profile };
+  $('profileDialog').close();
+  showProfile();
+  toast(`Profile saved for ${host}`);
+};
+$('pfRemove').onclick = async () => {
+  const { host } = state.profile;
+  await saveProfiles(removeProfile(await loadProfiles(), host));
+  $('profileDialog').close();
+  await applyProfile();
+  render();
+  toast(`Profile removed for ${host}`);
+};
+
 // ------------------------------------------------------------ collections
 
 function askName(title, value = '') {
@@ -1523,6 +1936,8 @@ function openCollection(c) {
   state.collectionId = c.id;
   state.live = false;
   state.historyId = null;
+  state.similar = null;
+  applyProfile();
   state.images = c.images.map((img, n) => ({
     source: 'imported', alt: '', width: 0, height: 0, ...img,
     type: img.type && img.type !== 'other' ? img.type : guessType(img.url),
@@ -1537,8 +1952,10 @@ async function showCollections() {
   const list = $('collectionsList');
   list.replaceChildren();
   const all = sortCollections(await loadCollections());
+  const shown = all.filter((c) => matchesCollection(c, $('collSearch').value));
   if (!all.length) list.append(el('p', 'muted', 'No collections yet. Select images and click ★ Save.'));
-  for (const c of all) {
+  else if (!shown.length) list.append(el('p', 'muted', 'No collections match your search.'));
+  for (const c of shown) {
     const row = el('div', 'hist');
     const thumb = el('img', 'checker');
     thumb.alt = '';
@@ -1546,7 +1963,19 @@ async function showCollections() {
     thumb.onerror = () => (thumb.src = '../icons/icon48.png');
     const text = el('div');
     text.append(el('b', '', c.name), el('span', 'muted small', `${c.images.length.toLocaleString()} images · ${new Date(c.updated).toLocaleDateString()}`));
+    if (c.tags?.length) text.append(el('span', 'small tags', c.tags.join(', ')));
+    if (c.note) text.append(el('span', 'muted small', c.note));
+    row.title = c.note ?? '';
     const actions = el('div', 'coll-actions');
+    const details = el('button', '', 'Tags');
+    details.title = 'Edit tags and note';
+    details.onclick = async (e) => {
+      e.stopPropagation();
+      const edited = await askDetails(c);
+      if (!edited) return;
+      await saveCollections(setCollectionDetails(await loadCollections(), c.id, edited));
+      showCollections();
+    };
     const rename = el('button', '', 'Rename');
     rename.onclick = async (e) => {
       e.stopPropagation();
@@ -1563,7 +1992,7 @@ async function showCollections() {
       await saveCollections(deleteCollection(await loadCollections(), c.id));
       showCollections();
     };
-    actions.append(rename, del);
+    actions.append(details, rename, del);
     row.append(thumb, text, actions);
     row.onclick = () => openCollection(c);
     list.append(row);
@@ -1571,6 +2000,40 @@ async function showCollections() {
   $('collectionsPanel').classList.remove('hidden');
 }
 
+function askDetails(c) {
+  const dialog = $('collDialog');
+  $('collTitle').textContent = c.name;
+  $('collTags').value = (c.tags ?? []).join(', ');
+  $('collNote').value = c.note ?? '';
+  dialog.returnValue = '';
+  dialog.showModal();
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok' ? { tags: $('collTags').value, note: $('collNote').value } : null), { once: true });
+  });
+}
+
+$('collSearch').addEventListener('input', debounce(showCollections, 150));
+$('backupCollections').onclick = async () => {
+  const all = await loadCollections();
+  if (!all.length) return toast('No collections to back up');
+  const name = applyTemplate('image-scraper-collections_{date}', { url: '' });
+  await saveBlob(new Blob([backupCollections(all)], { type: 'application/json' }), `${name}.json`);
+  toast(`Backed up ${all.length} collection${all.length === 1 ? '' : 's'}`);
+};
+$('restoreCollections').onclick = () => $('collFile').click();
+$('collFile').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const { collections, created, images } = restoreCollections(await loadCollections(), await file.text());
+    await saveCollections(collections);
+    toast(`Restored ${created} new collection${created === 1 ? '' : 's'} and ${images.toLocaleString()} images`);
+    showCollections();
+  } catch (err) {
+    toast(`Could not restore: ${err.message}`, 5000);
+  }
+};
 $('collectionsBtn').onclick = showCollections;
 $('closeCollections').onclick = () => $('collectionsPanel').classList.add('hidden');
 $('newCollection').onclick = async () => {
@@ -1661,7 +2124,7 @@ $('themeBtn').onclick = async () => {
 
 const rerender = debounce(render, 150);
 for (const id of ['fText', 'fMinW', 'fMinH', 'fMaxW', 'fMaxH', 'fMinKB', 'fMaxKB']) $(id).addEventListener('input', rerender);
-for (const id of ['fRegex', 'fKeepUnknown', 'fHideTracking', 'fAspect', 'fDomain', 'fHideDupes', 'fSelectedOnly', 'sortKey', 'sortDir']) {
+for (const id of ['fRegex', 'fKeepUnknown', 'fHideTracking', 'fAspect', 'fRights', 'fDomain', 'fHideDupes', 'fSelectedOnly', 'sortKey', 'sortDir']) {
   $(id).addEventListener('change', render);
 }
 document.querySelectorAll('[data-preset]').forEach((b) => {
@@ -1673,6 +2136,7 @@ document.querySelectorAll('[data-preset]').forEach((b) => {
   };
 });
 $('resetFilters').onclick = () => {
+  state.similar = null;
   writeFilters(defaultFilters());
   render();
 };
@@ -1684,6 +2148,7 @@ api.storage.onChanged.addListener(async (changes) => {
     applyTheme(settings.theme);
     applyView();
     $('stripMeta').checked = !!settings.stripMetadata;
+    $('prepOn').checked = !!settings.prepEnabled;
   }
 });
 
@@ -1745,6 +2210,9 @@ $('stripMeta').checked = !!settings.stripMetadata;
 $('stripMeta').onchange = async () => {
   settings = await saveSettings({ stripMetadata: $('stripMeta').checked });
 };
+$('prepOn').checked = !!settings.prepEnabled;
+await loadLogo();
+showProfile();
 if (matchMedia('(max-width: 900px)').matches) $('sidebar').classList.add('collapsed');
 if (panel) await setupPanel();
 
@@ -1760,11 +2228,16 @@ if (state.mode === 'history') {
   }
 } else if (state.mode === 'import') {
   await importFromStorage(params.get('key'));
+  if (params.has('audit')) {
+    auditView = 'page';
+    $('auditBtn').click();
+  }
 } else if (state.mode === 'alltabs') {
   scan();
 } else {
   state.tab = await resolveTargetTab().catch(() => null);
   if (state.tab) setSource(state.tab.title || state.tab.url);
+  await applyProfile();
   if (params.get('pick')) {
     render();
     $('pick').click();
