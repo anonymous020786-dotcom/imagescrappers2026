@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>{{SITE_URL}}/</loc>
+    <lastmod>{{DATE}}</lastmod>
+    <image:image><image:loc>{{SITE_URL}}/assets/og-image.png</image:loc></image:image>
+    <image:image><image:loc>{{SITE_URL}}/assets/screenshot-1.png</image:loc></image:image>
+    <image:image><image:loc>{{SITE_URL}}/assets/screenshot-2.png</image:loc></image:image>
+    <image:image><image:loc>{{SITE_URL}}/assets/screenshot-3.png</image:loc></image:image>
+    <image:image><image:loc>{{SITE_URL}}/assets/screenshot-4.png</image:loc></image:image>
+    <image:image><image:loc>{{SITE_URL}}/assets/screenshot-5.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>{{SITE_URL}}/privacy/</loc>
+    <lastmod>{{DATE}}</lastmod>
+  </url>
+</urlset>

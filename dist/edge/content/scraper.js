@@ -141,9 +141,10 @@
       }
       const key = `${source}|${url}`;
       if (seen.has(key)) {
-        if (extra.rights) {
+        if (extra.rights || extra.seo) {
           const hit = results.find((r) => r.url === url && r.source === source);
           if (hit) hit.rights ??= extra.rights;
+          if (hit && extra.seo) hit.seo = [...new Set([...(hit.seo || []), ...extra.seo])];
         }
         return;
       }
@@ -162,6 +163,8 @@
         // Facts for the image audit (only known for <img> elements).
         ...(extra.audit ? { audit: extra.audit } : {}),
         ...(extra.rights ? { rights: extra.rights } : {}),
+        // Declared as the page's sharing or structured-data image (for the SEO checks).
+        ...(extra.seo ? { seo: extra.seo } : {}),
       });
     }
 
@@ -275,7 +278,11 @@
         'meta[name="twitter:image"]', 'meta[name="twitter:image:src"]', 'meta[itemprop="image"]',
         'meta[name="msapplication-TileImage"]',
       ].join(',');
-      for (const m of document.querySelectorAll(metaSel)) add(m.content, 'meta', null, { title: m.getAttribute('property') || m.name });
+      for (const m of document.querySelectorAll(metaSel)) {
+        const prop = m.getAttribute('property') || m.name || '';
+        const tag = prop.startsWith('og:') ? 'og' : prop.startsWith('twitter:') ? 'twitter' : m.hasAttribute('itemprop') ? 'schema' : '';
+        add(m.content, 'meta', null, { title: prop || 'itemprop image', ...(tag ? { seo: [tag] } : {}) });
+      }
       for (const l of document.querySelectorAll('link[rel~="icon"], link[rel~="apple-touch-icon"], link[rel="apple-touch-icon-precomposed"], link[rel="image_src"], link[rel="mask-icon"]')) {
         const sizes = /^(\d+)x(\d+)$/i.exec(l.getAttribute('sizes') || '');
         add(l.href, l.rel.includes('icon') ? 'icon' : 'meta', null, sizes ? { width: +sizes[1], height: +sizes[2], title: l.rel } : { title: l.rel });
@@ -290,7 +297,7 @@
                 for (const item of [].concat(v)) {
                   // Only an image's own object describes its rights: a page's author isn't always the photographer.
                   const owner = typeof item === 'object' ? item : /ImageObject/.test(String(node['@type'])) ? node : null;
-                  add(typeof item === 'string' ? item : item?.url || item?.contentUrl, 'meta', null, { title: `ld+json ${k}`, rights: jsonLdRights(owner) });
+                  add(typeof item === 'string' ? item : item?.url || item?.contentUrl, 'meta', null, { title: `ld+json ${k}`, rights: jsonLdRights(owner), seo: ['schema'] });
                 }
               } else if (typeof v === 'object') collect(v);
             }

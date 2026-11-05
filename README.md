@@ -41,7 +41,7 @@ npm run build:chrome   # or a single target: chrome | edge | brave | opera | viv
 
 Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 
-## Features (100+)
+## Features (110+)
 
 ### Detection: finding every image
 1. `<img>` elements, including their natural (intrinsic) dimensions
@@ -170,6 +170,13 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 106. **Copy as code**: copy the selected images as Markdown, HTML `<img>` tags or BBCode
 107. **Audit a whole site**: run the image audit on crawl results and rank the pages by possible savings, with a CSV report. Each image counts once, on the first page it was found. Full-render crawls find the most; fast crawls can't see layout, so they skip the size and lazy-loading checks
 
+### Image SEO
+108. **Alt text quality**: flags alt text that says nothing ("image", "photo 3", a file name like `IMG_1234.jpg`), keyword stuffing, alt text over 125 characters, and the same alt text reused on three or more images of a page
+109. **Descriptive file names**: flags camera and default names (`IMG_20240101_…`, `DSC_0042`, `image.jpg`) and opaque hashes, reading the real file name behind image CDNs and resizers (`/_next/image?url=…`)
+110. **Social sharing images**: checks each page for an `og:image` (Facebook, LinkedIn, chat apps) and `twitter:image`, and, after Analyze, that it is at least 1200×630, close to 1.91:1 and served over https
+111. **Structured data images**: checks that the page's JSON-LD or microdata includes an image for rich results. A shared `og:image` found by a crawl counts for every page that declares it
+112. **Google image sitemap**: export an image sitemap (`.xml`) of the scanned or crawled pages and their images, ready to submit in Search Console (split every 50,000 pages, up to 1,000 images per page)
+
 ### Browser integration
 - Right-click menus: download an image with your naming rules, download a linked image, copy an image URL, reverse search, download all images on the page, scrape all tabs
 - Keyboard commands: `Alt+Shift+I` popup, `Alt+Shift+O` dashboard, `Alt+Shift+D` quick download (all can be changed)
@@ -199,7 +206,7 @@ src/
   options/                settings page
   lib/                    shared modules: utils, zip, imaging, scanner, settings, browser shim,
                           crawler, pagefetch, robots, urlgen, crawl, downloader, referer,
-                          audit (image audit rules), exif (read/remove metadata), editgeom (editor geometry),
+                          audit (image audit and SEO rules), seo (page SEO checks, image sitemaps), exif (read/remove metadata), editgeom (editor geometry),
                           pdf (PDF writer), sheet (contact sheet layout), palette (colour extraction), collections,
                           rights (credit and licence), prepare (sizes, target file size, watermark), profiles (site profiles)
 scripts/build.mjs         per-browser builds and store zips (no dependencies)

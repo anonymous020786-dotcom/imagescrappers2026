@@ -156,7 +156,7 @@
         <button id="dupes" title="Find visually identical images (perceptual hash)">Find duplicates</button>
         <button id="keepBest" class="hidden" title="In each group of duplicates, select the largest copy and deselect the others">Keep best</button>
         <button id="similarClear" class="hidden" title="Back to all images">Similar images ✕</button>
-        <button id="auditBtn" title="Accessibility and performance check of this page's images (missing alt text, oversized files, lazy loading…)">Audit</button>
+        <button id="auditBtn" title="Accessibility, performance and SEO check of this page's images (alt text, file names, social images, oversized files, lazy loading…)">Audit</button>
         <div class="seg">
           <button id="viewGrid" title="Grid view">▦</button>
           <button id="viewList" title="List view">☰</button>
@@ -202,6 +202,7 @@
         <button data-export="csv">Spreadsheet (.csv)</button>
         <button data-export="json">Metadata (.json)</button>
         <button data-export="html">HTML gallery (.html)</button>
+        <button data-export="sitemap" title="Google image sitemap of the pages these images were found on">Image sitemap (.xml)</button>
         <button data-export="pdf">PDF document (.pdf)…</button>
         <button data-export="sheet">Contact sheet (.png)</button>
         <hr>
@@ -470,7 +471,7 @@
 
   <dialog id="auditDialog" class="import-dialog audit-dialog">
     <div class="dialog-head">
-      <h3>Image audit</h3>
+      <h3>Image audit &amp; SEO</h3>
       <button id="auditClose" title="Close (Esc)">✕</button>
     </div>
     <p id="auditSummary" class="muted small"></p>
@@ -486,6 +487,7 @@
     <div id="auditList" class="audit-list"></div>
     <div class="import-row end">
       <span class="muted small spacer">Checks the images as found on the page. Savings are estimates.</span>
+      <button id="auditSitemap" title="Save a Google image sitemap (.xml) listing these pages and their images">Image sitemap</button>
       <button id="auditMeasure" title="Fetch JPEG/PNG images and measure their real size as WebP, on your device">Measure WebP savings</button>
       <button id="auditCsv">Export CSV</button>
     </div>

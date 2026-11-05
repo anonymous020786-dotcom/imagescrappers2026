@@ -293,6 +293,9 @@ try {
     assert.match(await dash.textContent('#auditSummary'), /images have findings/);
     // The fixture's responsive <img> has no width/height attributes.
     assert.match(await dash.textContent('#auditRules'), /No width\/height attributes/);
+    // The fixture declares og:image and a JSON-LD image, so the page-level SEO checks find both.
+    assert.doesNotMatch(await dash.textContent('#auditRules'), /No social sharing image|No image in structured data/);
+    assert.equal(await dash.isDisabled('#auditSitemap'), false);
     assert.ok((await dash.$$('#auditList .audit-item')).length > 0);
     assert.equal(await dash.isDisabled('#auditCsv'), false);
     await dash.keyboard.press('Escape');

@@ -72,10 +72,13 @@ export class Crawler {
       prev.width = Math.max(prev.width || 0, img.width || 0);
       prev.height = Math.max(prev.height || 0, img.height || 0);
       prev.rights ??= img.rights;
+      // A shared og:image is stored once but represents every page that declares it.
+      if (img.seo?.length) (prev.seoRefs ??= []).push({ page: pageUrl, tags: img.seo });
       return null;
     }
     const entry = {
       ...img,
+      ...(img.seo?.length ? { seoRefs: [{ page: pageUrl, tags: img.seo }] } : {}),
       sources: img.sources ?? [img.source],
       type: img.type && img.type !== 'other' ? img.type : guessType(img.url),
       pageUrl,
