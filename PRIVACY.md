@@ -63,8 +63,9 @@ all tabs, bulk scraping and crawling). You can allow or remove it at any time on
 ## This website
 
 The extension's website (its landing page on Netlify) uses Google Tag Manager to measure visits, such as which pages
-are viewed and which download buttons are clicked. Google's privacy policy applies to that data. This applies to the
-website only: the extension itself has no analytics and sends nothing to Google or the developer.
+are viewed and which download buttons are clicked, and loads its font from Google Fonts. Google's privacy policy
+applies to that data. Your light or dark theme choice is saved in your browser only. This applies to the website
+only: the extension itself has no analytics and sends nothing to Google or the developer.
 
 ## Children
 
