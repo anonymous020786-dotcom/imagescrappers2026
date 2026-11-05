@@ -18,7 +18,7 @@ The English description and search terms are in `store/chrome/LISTING.md`.
 **Description**
 
 ```
-Image Scraper Pro trouve toutes les images d'une page web et vous permet de filtrer, prévisualiser et télécharger exactement celles que vous voulez, une par une ou toutes ensemble dans un fichier ZIP.
+Téléchargez toutes les images d'une page web en un clic. Image Scraper Pro est un téléchargeur d'images en masse gratuit : il trouve chaque image de la page, vous permet de les filtrer et de les prévisualiser, puis enregistre celles que vous voulez en fichiers ou dans un seul ZIP. Explorez un site entier, convertissez en WebP, JPEG ou PNG et vérifiez vos pages avec l'audit SEO des images intégré.
 
 TROUVE LES IMAGES QUE LES AUTRES OUTILS MANQUENT
 • <img>, la meilleure résolution de srcset, les sources <picture> et les images à chargement différé (data-src et plus de 20 autres attributs)
@@ -51,6 +51,13 @@ MODIFIER, NETTOYER ET AUDITER
 • Enregistrez des images isolées d'un GIF en PNG
 • Vérifiez les noms de fichiers avant de télécharger et copiez les images en Markdown, HTML ou BBCode
 • Audit d'images pour les développeurs web : texte alternatif manquant, fichiers trop lourds, images convertibles en WebP et erreurs de chargement différé, avec corrections et export CSV. Auditez tout un site exploré, page par page
+
+AUDIT SEO DES IMAGES (NOUVEAU)
+• Vérification du texte alternatif : absent, générique (« image », « IMG_1234.jpg »), suroptimisé, trop long ou répété
+• Noms de fichiers : signale les noms d'appareil photo et les identifiants aléatoires, même derrière un CDN d'images
+• Images de partage : og:image et cartes Twitter présentes, 1200×630, format 1,91:1 et en https
+• Données structurées : vérifie que le JSON-LD de la page contient une image pour les résultats enrichis
+• Export d'un sitemap d'images Google (.xml) pour la Search Console
 
 CRÉDITS ET SOURCES
 • Consultez le créateur, le crédit, le copyright et la licence indiqués par la page ou le fichier, et filtrez selon ces informations
@@ -98,7 +105,7 @@ Merci de respecter les conditions des sites et les droits d'auteur lorsque vous 
 **Beschreibung**
 
 ```
-Image Scraper Pro findet jedes Bild auf einer Webseite und lässt Sie genau die Bilder filtern, ansehen und herunterladen, die Sie möchten – einzeln oder alle auf einmal als ZIP.
+Alle Bilder einer Webseite mit einem Klick herunterladen. Image Scraper Pro ist ein kostenloser Bilder-Downloader: Er findet jedes Bild auf der Seite, lässt Sie filtern und ansehen und speichert die gewünschten Bilder einzeln oder als ein ZIP. Crawlen Sie eine ganze Website, konvertieren Sie in WebP, JPEG oder PNG und prüfen Sie Ihre Seiten mit der eingebauten SEO-Prüfung für Bilder.
 
 FINDET BILDER, DIE ANDERE TOOLS ÜBERSEHEN
 • <img>, die höchste Auflösung aus srcset, <picture>-Quellen und nachgeladene Bilder (data-src und über 20 weitere Attribute)
@@ -131,6 +138,13 @@ BEARBEITEN, BEREINIGEN UND PRÜFEN
 • Einzelne Frames eines GIFs als PNG speichern
 • Dateinamen vor dem Herunterladen prüfen und Bilder als Markdown, HTML oder BBCode kopieren
 • Bild-Audit für Webentwickler: fehlender Alternativtext, zu große Dateien, Bilder, die WebP sein könnten, und Lazy-Loading-Fehler, mit Lösungen und CSV-Export. Eine ganze gecrawlte Website Seite für Seite prüfen
+
+SEO-PRÜFUNG FÜR BILDER (NEU)
+• Alt-Text-Prüfung: fehlend, nichtssagend („image“, „IMG_1234.jpg“), mit Keywords überladen, zu lang oder mehrfach verwendet
+• Dateinamen: markiert Kamera-Standardnamen und Hashes, auch hinter Bild-CDNs
+• Vorschaubilder für soziale Netzwerke: og:image und Twitter Cards vorhanden, 1200×630, Format 1,91:1 und über https
+• Strukturierte Daten: prüft, ob das JSON-LD der Seite ein Bild für Rich Results enthält
+• Export einer Google-Bilder-Sitemap (.xml) für die Search Console
 
 URHEBER UND QUELLEN
 • Urheber, Bildnachweis, Copyright und Lizenz anzeigen, die Seite oder Datei angeben, und danach filtern
@@ -178,7 +192,7 @@ Bitte beachten Sie beim Herunterladen von Bildern die Nutzungsbedingungen der We
 **Descripción**
 
 ```
-Image Scraper Pro encuentra todas las imágenes de una página web y te permite filtrar, previsualizar y descargar exactamente las que quieras, una a una o todas a la vez en un ZIP.
+Descarga todas las imágenes de una página web con un clic. Image Scraper Pro es un descargador de imágenes masivo y gratuito: encuentra cada imagen de la página, te permite filtrarlas y previsualizarlas, y guarda las que quieras como archivos o en un solo ZIP. Rastrea un sitio web completo, convierte a WebP, JPEG o PNG y revisa tus páginas con la auditoría SEO de imágenes integrada.
 
 ENCUENTRA IMÁGENES QUE OTRAS HERRAMIENTAS PASAN POR ALTO
 • <img>, la mayor resolución de srcset, fuentes <picture> e imágenes de carga diferida (data-src y más de 20 atributos)
@@ -211,6 +225,13 @@ EDITAR, LIMPIAR Y AUDITAR
 • Guarda fotogramas sueltos de un GIF como PNG
 • Comprueba los nombres de archivo antes de descargar y copia imágenes como Markdown, HTML o BBCode
 • Auditoría de imágenes para desarrolladores web: texto alternativo ausente, archivos demasiado grandes, imágenes que podrían ser WebP y errores de carga diferida, con soluciones y exportación CSV. Audita todo un sitio rastreado, página por página
+
+AUDITORÍA SEO DE IMÁGENES (NUEVO)
+• Comprobador de texto alternativo: ausente, genérico («image», «IMG_1234.jpg»), con exceso de palabras clave, demasiado largo o repetido
+• Nombres de archivo: detecta nombres de cámara por defecto y hashes, incluso detrás de una CDN de imágenes
+• Imágenes para compartir: og:image y tarjetas de Twitter presentes, 1200×630, formato 1,91:1 y por https
+• Datos estructurados: comprueba que el JSON-LD de la página incluya una imagen para resultados enriquecidos
+• Exporta un sitemap de imágenes de Google (.xml) para Search Console
 
 CRÉDITOS Y FUENTES
 • Consulta el creador, el crédito, el copyright y la licencia que indican la página o el archivo, y filtra por ellos

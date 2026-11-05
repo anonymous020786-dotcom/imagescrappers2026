@@ -1,5 +1,5 @@
 {
-  "extName": { "message": "Image Scraper Pro" },
-  "extDescription": { "message": "Find, filter, preview and bulk-download every image on a page: srcset, CSS backgrounds, SVG, canvas, lazy-loaded, iframes and more." },
+  "extName": { "message": "Image Scraper Pro – Bulk Image Downloader" },
+  "extDescription": { "message": "Download all images on any page in one click: bulk image downloader with filters, ZIP, website crawler and image SEO audit." },
   "actionTitle": { "message": "Image Scraper Pro" }
 }

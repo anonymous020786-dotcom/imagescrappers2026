@@ -108,9 +108,15 @@ jobs:
           ZIP: packages/image-scraper-pro-chrome-${{ needs.build.outputs.version }}.zip
         run: |
           set -euo pipefail
-          TOKEN=$(curl -fsS https://oauth2.googleapis.com/token \
+          AUTH=$(curl -sS https://oauth2.googleapis.com/token \
             -d client_id="$CLIENT_ID" -d client_secret="$CLIENT_SECRET" \
-            -d refresh_token="$REFRESH_TOKEN" -d grant_type=refresh_token | jq -r .access_token)
+            -d refresh_token="$REFRESH_TOKEN" -d grant_type=refresh_token)
+          TOKEN=$(echo "$AUTH" | jq -r '.access_token // empty')
+          if [ -z "$TOKEN" ]; then
+            # Google's error code only (no secrets): invalid_grant means the refresh token expired or was revoked.
+            echo "::error::Google sign-in failed: $(echo "$AUTH" | jq -r '[.error, .error_description] | map(select(. != null)) | join(": ")'). To fix it, create a new CWS_REFRESH_TOKEN as described in DEPLOY.md, part 3."
+            exit 1
+          fi
           echo "::add-mask::$TOKEN"
           UPLOAD=$(curl -sS -X PUT -H "Authorization: Bearer $TOKEN" -H "x-goog-api-version: 2" \
             -T "$ZIP" "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$ID")

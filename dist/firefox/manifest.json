@@ -3,7 +3,8 @@
   "name": "__MSG_extName__",
   "short_name": "Img Scraper",
   "description": "__MSG_extDescription__",
-  "version": "1.5.0",
+  "homepage_url": "https://image-scraper-pro.netlify.app/",
+  "version": "1.6.0",
   "default_locale": "en",
   "icons": {
     "16": "icons/icon16.png",

@@ -1,6 +1,7 @@
 // Builds the landing page into site-dist/ (no dependencies). Netlify runs this on every deploy.
 //  - fills in {{SITE_URL}} (Netlify's primary URL, or SITE_URL), {{VERSION}} (package.json) and {{DATE}}
 //  - adds search-engine verification meta tags from GOOGLE_SITE_VERIFICATION / BING_SITE_VERIFICATION
+//  - points the download buttons at the stores when CHROME_STORE_URL / EDGE_STORE_URL / FIREFOX_STORE_URL are set
 //  - copies the store screenshots and extension icons, so the images live in one place
 //  - renders PRIVACY.md as /privacy/
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -23,11 +24,29 @@ const verification = [
   .filter(([, token]) => token?.trim())
   .map(([name, token]) => `<meta name="${name}" content="${token.trim().replace(/[^\w-]/g, '')}">`)
   .join('\n  ');
+// Store listings: set CHROME_STORE_URL / EDGE_STORE_URL / FIREFOX_STORE_URL in Netlify and the download buttons
+// become "Add to …" links, so installs count towards the store ranking. Unset, they download the ZIP from GitHub.
+const storeUrl = (name) => (/^https:\/\/\S+$/.test(process.env[name]?.trim() ?? '') ? process.env[name].trim() : '');
+const chromeStore = storeUrl('CHROME_STORE_URL');
+const stores = {
+  chrome: [chromeStore, 'Add to Chrome'],
+  brave: [chromeStore, 'Add from Chrome Web Store'],
+  vivaldi: [chromeStore, 'Add from Chrome Web Store'],
+  edge: [storeUrl('EDGE_STORE_URL'), 'Get it from Edge Add-ons'],
+  firefox: [storeUrl('FIREFOX_STORE_URL'), 'Add to Firefox'],
+};
+const zipUrl = (browser) => `https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-${browser}-${version}.zip`;
+const hrefFor = (browser) => stores[browser]?.[0] || zipUrl(browser);
+const ctaFor = (browser) => (stores[browser]?.[0] ? stores[browser][1] : 'Download .zip');
 const fill = (text) =>
   text
     .replaceAll('{{SITE_URL}}', siteUrl)
     .replaceAll('{{VERSION}}', version)
     .replaceAll('{{DATE}}', date)
+    .replace(/\{\{HREF:(\w+)\}\}/g, (_, b) => hrefFor(b))
+    .replace(/\{\{CTA:(\w+)\}\}/g, (_, b) => ctaFor(b))
+    .replaceAll('{{CHROME_BUTTON}}', chromeStore ? 'Add to Chrome' : 'Download for Chrome')
+    .replaceAll('{{INSTALL_URL}}', chromeStore || 'https://github.com/anonymous020786-dotcom/imagescrappers2026/releases/latest')
     .replace(/^[ \t]*\{\{SITE_VERIFICATION\}\}\n/m, verification ? `  ${verification}\n` : '');
 
 function walk(dir) {
