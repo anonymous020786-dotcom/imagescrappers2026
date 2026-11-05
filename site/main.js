@@ -1,4 +1,4 @@
-// Landing page behaviour: mobile menu, header shadow, reveal-on-scroll. No tracking.
+// Landing page behaviour: mobile menu, header shadow, reveal-on-scroll. Analytics live in analytics.js.
 document.documentElement.classList.add('js');
 
 const nav = document.querySelector('.nav');
