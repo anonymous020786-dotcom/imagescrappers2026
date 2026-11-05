@@ -63,7 +63,7 @@ body {
 
 button, select, input, textarea { font: inherit; color: inherit; }
 
-button {
+button, a.button {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -71,7 +71,9 @@ button {
   cursor: pointer;
   white-space: nowrap;
 }
-button:hover:not(:disabled) { border-color: var(--accent); }
+button:hover:not(:disabled), a.button:hover { border-color: var(--accent); }
+/* Links styled as buttons, such as "Help & guides". */
+a.button { display: inline-block; color: inherit; text-decoration: none; }
 button:disabled { opacity: 0.5; cursor: default; }
 button.primary { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); font-weight: 600; }
 button.danger { color: var(--danger); }
