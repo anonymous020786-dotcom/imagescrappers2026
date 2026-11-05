@@ -122,6 +122,8 @@ write(join(OUT, 'privacy', 'index.html'), fill(`<!doctype html>
   <meta property="og:image" content="{{SITE_URL}}/assets/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/assets/icon32.png" sizes="32x32" type="image/png">
+  <script src="/analytics.js"></script>
+  <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-KKDJ4GW4"></script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>

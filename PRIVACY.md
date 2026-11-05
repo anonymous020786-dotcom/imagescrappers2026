@@ -60,6 +60,12 @@ In Chrome and other Chromium browsers, access to all sites is **optional**. The 
 first use a feature that fetches images or pages from other sites (analyze, ZIP, convert, duplicates, copy image,
 all tabs, bulk scraping and crawling). You can allow or remove it at any time on the options page.
 
+## This website
+
+The extension's website (its landing page on Netlify) uses Google Tag Manager to measure visits, such as which pages
+are viewed and which download buttons are clicked. Google's privacy policy applies to that data. This applies to the
+website only: the extension itself has no analytics and sends nothing to Google or the developer.
+
 ## Children
 
 The extension is a general-purpose tool and is not directed at children under 13.
