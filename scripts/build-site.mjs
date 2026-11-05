@@ -1,5 +1,6 @@
 // Builds the landing page into site-dist/ (no dependencies). Netlify runs this on every deploy.
 //  - fills in {{SITE_URL}} (Netlify's primary URL, or SITE_URL), {{VERSION}} (package.json) and {{DATE}}
+//  - adds search-engine verification meta tags from GOOGLE_SITE_VERIFICATION / BING_SITE_VERIFICATION
 //  - copies the store screenshots and extension icons, so the images live in one place
 //  - renders PRIVACY.md as /privacy/
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -14,7 +15,20 @@ const TEXT = new Set(['.html', '.xml', '.txt', '.webmanifest', '.css', '.js', '.
 const siteUrl = (process.env.SITE_URL || process.env.URL || 'https://image-scraper-pro.netlify.app').replace(/\/+$/, '');
 const { version } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 const date = new Date().toISOString().slice(0, 10);
-const fill = (text) => text.replaceAll('{{SITE_URL}}', siteUrl).replaceAll('{{VERSION}}', version).replaceAll('{{DATE}}', date);
+// Search Console / Bing Webmaster "HTML tag" verification: set the token as an environment variable in Netlify.
+const verification = [
+  ['google-site-verification', process.env.GOOGLE_SITE_VERIFICATION],
+  ['msvalidate.01', process.env.BING_SITE_VERIFICATION],
+]
+  .filter(([, token]) => token?.trim())
+  .map(([name, token]) => `<meta name="${name}" content="${token.trim().replace(/[^\w-]/g, '')}">`)
+  .join('\n  ');
+const fill = (text) =>
+  text
+    .replaceAll('{{SITE_URL}}', siteUrl)
+    .replaceAll('{{VERSION}}', version)
+    .replaceAll('{{DATE}}', date)
+    .replace(/^[ \t]*\{\{SITE_VERIFICATION\}\}\n/m, verification ? `  ${verification}\n` : '');
 
 function walk(dir) {
   return readdirSync(dir).flatMap((n) => {
