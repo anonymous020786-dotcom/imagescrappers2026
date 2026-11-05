@@ -68,7 +68,19 @@ function write(path, data) {
 // ------------------------------------------------------------- Markdown → HTML
 
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const slugify = (s) => s.toLowerCase().replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+// Headings are raw Markdown, so the id keeps only letters and digits.
+const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+// Markdown to plain text for structured data: link text, code and emphasis without their markup.
+const plainText = (md) =>
+  md
+    .replace(/\[([^\]]+)\]\([^)\s]*\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/(^|[\s(])_([^_]+)_/g, '$1$2')
+    .replace(/^\s*(?:[-*]|\d+\.)\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 function inline(text) {
   return esc(text)
@@ -357,8 +369,8 @@ const helpHtml = markdownToHtml(help.body);
 // Every "### question" and the text under it becomes a FAQPage entry.
 const faq = [...help.body.replace(/\r\n/g, '\n').matchAll(/^### (.+)\n([\s\S]*?)(?=^#{2,3} |(?![\s\S]))/gm)].map((m) => ({
   '@type': 'Question',
-  name: m[1].trim(),
-  acceptedAnswer: { '@type': 'Answer', text: markdownToHtml(m[2].trim()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim() },
+  name: plainText(m[1]),
+  acceptedAnswer: { '@type': 'Answer', text: plainText(m[2]) },
 }));
 write(
   join(OUT, 'help', 'index.html'),
