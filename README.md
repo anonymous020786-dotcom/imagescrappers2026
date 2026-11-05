@@ -13,6 +13,13 @@ lazy-load attributes, CSS backgrounds, pseudo-elements, inline SVG, canvas,
 video posters, Shadow DOM and iframes. You can then filter, preview, analyze,
 de-duplicate, convert and bulk-download them, individually or as one ZIP file.
 
+## Install from your browser's store
+
+- **Chrome** (also Brave, Vivaldi and Opera): [Chrome Web Store](https://chromewebstore.google.com/detail/image-scraper-pro/ddaloejoiabppjlpokmgpenbbkcdgdmf)
+- **Firefox** (desktop and Android): [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/image-scraper-pro/)
+- **Microsoft Edge**: [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/image-scraper-pro/kphndbcmfdhehhimpjanlnjebgjmahkp)
+- Website: [image-scraper-pro.netlify.app](https://image-scraper-pro.netlify.app/)
+
 ## Download a ready-made build
 
 Pre-built packages are committed in [`dist/`](dist). You don't need to build anything:
