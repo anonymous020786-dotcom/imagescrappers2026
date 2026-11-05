@@ -57,8 +57,8 @@
         "softwareVersion": "{{VERSION}}",
         "description": "Browser extension that finds every image on a web page — img, srcset, lazy-loaded, CSS backgrounds, SVG, canvas, Shadow DOM and iframes — and lets you filter, preview, audit and bulk-download them, or crawl a whole website.",
         "url": "{{SITE_URL}}/",
-        "downloadUrl": "https://github.com/anonymous020786-dotcom/imagescrappers2026/releases/latest",
-        "installUrl": "https://github.com/anonymous020786-dotcom/imagescrappers2026/releases/latest",
+        "downloadUrl": "{{INSTALL_URL}}",
+        "installUrl": "{{INSTALL_URL}}",
         "screenshot": [
           "{{SITE_URL}}/assets/screenshot-1.png",
           "{{SITE_URL}}/assets/screenshot-3.png",
@@ -145,9 +145,9 @@
           <h1 id="hero-title">Download <span class="grad-text">every image</span> on any web page</h1>
           <p class="lead">Image Scraper Pro finds the images other tools miss — lazy-loaded, CSS backgrounds, SVG, canvas, Shadow DOM and iframes — then lets you filter, audit and bulk-download them in one click.</p>
           <div class="cta-row">
-            <a class="btn btn-primary" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-chrome-{{VERSION}}.zip" data-dl="chrome">
+            <a class="btn btn-primary" href="{{HREF:chrome}}" data-dl="chrome">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>
-              Download for Chrome <small>· free</small>
+              {{CHROME_BUTTON}} <small>· free</small>
             </a>
             <a class="btn" href="#download">All browsers</a>
           </div>
@@ -456,13 +456,13 @@
           <p class="lead">Version {{VERSION}} · Manifest V3 · GPL-3.0. Pick your browser to download a ready-to-install package.</p>
         </div>
         <div class="dl-grid">
-          <a class="dl featured" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-chrome-{{VERSION}}.zip" data-dl="chrome"><span class="mono" style="--c:#3b7bea">C</span><strong>Chrome</strong><span>Recommended · side panel</span><em>Download .zip →</em></a>
-          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-edge-{{VERSION}}.zip" data-dl="edge"><span class="mono" style="--c:#0c8bd0">E</span><strong>Microsoft Edge</strong><span>Side panel supported</span><em>Download .zip →</em></a>
-          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-firefox-{{VERSION}}.zip" data-dl="firefox"><span class="mono" style="--c:#f2672a">F</span><strong>Firefox</strong><span>Desktop &amp; Android, 121+</span><em>Download .zip →</em></a>
-          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-brave-{{VERSION}}.zip" data-dl="brave"><span class="mono" style="--c:#e8512b">B</span><strong>Brave</strong><span>Chromium build</span><em>Download .zip →</em></a>
-          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-opera-{{VERSION}}.zip" data-dl="opera"><span class="mono" style="--c:#e3233a">O</span><strong>Opera</strong><span>Chromium build</span><em>Download .zip →</em></a>
-          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-vivaldi-{{VERSION}}.zip" data-dl="vivaldi"><span class="mono" style="--c:#d93a3a">V</span><strong>Vivaldi</strong><span>Chromium build</span><em>Download .zip →</em></a>
-          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-safari-{{VERSION}}.zip" data-dl="safari"><span class="mono" style="--c:#1b88ca">S</span><strong>Safari</strong><span>macOS, Safari 16.4+ (Xcode)</span><em>Download .zip →</em></a>
+          <a class="dl featured" href="{{HREF:chrome}}" data-dl="chrome"><span class="mono" style="--c:#3b7bea">C</span><strong>Chrome</strong><span>Recommended · side panel</span><em>{{CTA:chrome}} →</em></a>
+          <a class="dl" href="{{HREF:edge}}" data-dl="edge"><span class="mono" style="--c:#0c8bd0">E</span><strong>Microsoft Edge</strong><span>Side panel supported</span><em>{{CTA:edge}} →</em></a>
+          <a class="dl" href="{{HREF:firefox}}" data-dl="firefox"><span class="mono" style="--c:#f2672a">F</span><strong>Firefox</strong><span>Desktop &amp; Android, 121+</span><em>{{CTA:firefox}} →</em></a>
+          <a class="dl" href="{{HREF:brave}}" data-dl="brave"><span class="mono" style="--c:#e8512b">B</span><strong>Brave</strong><span>Chromium build</span><em>{{CTA:brave}} →</em></a>
+          <a class="dl" href="{{HREF:opera}}" data-dl="opera"><span class="mono" style="--c:#e3233a">O</span><strong>Opera</strong><span>Chromium build</span><em>{{CTA:opera}} →</em></a>
+          <a class="dl" href="{{HREF:vivaldi}}" data-dl="vivaldi"><span class="mono" style="--c:#d93a3a">V</span><strong>Vivaldi</strong><span>Chromium build</span><em>{{CTA:vivaldi}} →</em></a>
+          <a class="dl" href="{{HREF:safari}}" data-dl="safari"><span class="mono" style="--c:#1b88ca">S</span><strong>Safari</strong><span>macOS, Safari 16.4+ (Xcode)</span><em>{{CTA:safari}} →</em></a>
           <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026" data-dl="source"><span class="mono" style="--c:#24292f">&lt;/&gt;</span><strong>Source code</strong><span>Build it yourself, no dependencies</span><em>View on GitHub →</em></a>
         </div>
         <div class="install-note">
@@ -517,7 +517,7 @@
           <h2 id="final-title">Start collecting images in seconds</h2>
           <p>Free, private and open source. No sign-up, no limits.</p>
           <div class="cta-row">
-            <a class="btn btn-white" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-chrome-{{VERSION}}.zip" data-dl="chrome">Download for Chrome</a>
+            <a class="btn btn-white" href="{{HREF:chrome}}" data-dl="chrome">{{CHROME_BUTTON}}</a>
             <a class="btn btn-ghost" href="#download">Other browsers</a>
           </div>
         </div>

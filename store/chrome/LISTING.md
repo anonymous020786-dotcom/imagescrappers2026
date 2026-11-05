@@ -16,7 +16,7 @@ Upload `dist/image-scraper-pro-chrome-<version>.zip` (built with `npm run build:
 **Description** (paste as-is):
 
 ```
-Image Scraper Pro finds every image on a web page and lets you filter, preview and download exactly the ones you want, one at a time or all at once as a ZIP.
+Download all images on any web page in one click. Image Scraper Pro is a free bulk image downloader: it finds every image on the page, lets you filter and preview them, and saves the ones you want as files or one ZIP. Crawl a whole website for images, convert them to WebP, JPEG or PNG, and check your pages with the built-in image SEO audit.
 
 FINDS IMAGES OTHER TOOLS MISS
 • <img>, the highest-resolution srcset candidate, <picture> sources and lazy-loaded images (data-src and 20+ other attributes)
@@ -45,6 +45,13 @@ EDIT, CLEAN AND AUDIT
 • Prepare a whole selection: exact sizes for social posts, a target file size, and your own text or logo watermark
 • Save single frames of a GIF as PNG files
 • Image audit for web developers: missing alt text, oversized files, images that could be WebP and lazy-loading mistakes, with fixes and a CSV export. Audit a whole crawled site, page by page
+
+IMAGE SEO AUDIT (NEW)
+• Alt text checker: missing, generic ("image", "IMG_1234.jpg"), keyword-stuffed, too long or reused alt text
+• File names: flags camera defaults and hashes, even behind image CDNs
+• Social sharing images: og:image and Twitter cards present, 1200×630, 1.91:1 and over https
+• Structured data: checks the page's JSON-LD for an image for rich results
+• Export a Google image sitemap (.xml) for Search Console
 
 CREDIT AND SOURCES
 • See the creator, credit, copyright and licence stated by the page or the file, and filter by them
@@ -75,6 +82,7 @@ WORKS EVERYWHERE
 
 PRIVATE BY DESIGN
 Everything runs in your browser. No account, no analytics, no tracking, no ads, and nothing is sent to the developer. Open source: https://github.com/anonymous020786-dotcom/imagescrappers2026
+Website and install guide: https://image-scraper-pro.netlify.app/
 
 Please respect website terms and copyright when downloading images.
 ```
@@ -99,8 +107,10 @@ Screenshot captions, if the dashboard asks for them:
 4. Crawl a whole website for images
 5. One-click popup with the page's largest images
 
-**Official URL:** leave empty (it needs a verified domain).
-**Homepage URL:** `https://github.com/anonymous020786-dotcom/imagescrappers2026`
+If the dashboard has no caption field, put the captions on the screenshots themselves: listings with short benefit captions ("Download every image as a ZIP") convert better.
+
+**Official URL:** `https://image-scraper-pro.netlify.app/`. It must be verified in Google Search Console by the same Google account that owns the developer account (it is verified with the HTML tag). Then pick it from the list, and the listing shows the site as the publisher's verified website.
+**Homepage URL:** `https://image-scraper-pro.netlify.app/`
 **Support URL:** `https://github.com/anonymous020786-dotcom/imagescrappers2026/issues`
 **Mature content:** No.
 
