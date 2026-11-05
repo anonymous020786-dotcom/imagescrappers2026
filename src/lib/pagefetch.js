@@ -61,6 +61,7 @@ export function extractFromDocument(doc, pageUrl) {
     if (prev) {
       if (!prev.sources.includes(source)) prev.sources.push(source);
       prev.rights ??= extra.rights;
+      if (extra.seo) prev.seo = [...new Set([...(prev.seo ?? []), ...extra.seo])];
       return;
     }
     images.set(url, { url, source, sources: [source], order: order++, width: 0, height: 0, alt: '', title: '', ...extra });
@@ -108,7 +109,11 @@ export function extractFromDocument(doc, pageUrl) {
     if (href && isImageUrl(href)) add(href, 'link', { title: a.textContent.trim().slice(0, 100) });
   }
   const metaSel = 'meta[property="og:image"], meta[property="og:image:url"], meta[property="og:image:secure_url"], meta[name="twitter:image"], meta[name="twitter:image:src"], meta[itemprop="image"]';
-  for (const m of doc.querySelectorAll(metaSel)) add(m.getAttribute('content'), 'meta');
+  for (const m of doc.querySelectorAll(metaSel)) {
+    const prop = m.getAttribute('property') ?? m.getAttribute('name') ?? '';
+    const tag = prop.startsWith('og:') ? 'og' : prop.startsWith('twitter:') ? 'twitter' : 'schema';
+    add(m.getAttribute('content'), 'meta', { seo: [tag] });
+  }
   for (const l of doc.querySelectorAll('link[rel~="icon"], link[rel~="apple-touch-icon"], link[rel="image_src"]')) {
     add(l.getAttribute('href'), (l.getAttribute('rel') ?? '').includes('icon') ? 'icon' : 'meta');
   }
@@ -123,7 +128,7 @@ export function extractFromDocument(doc, pageUrl) {
               // Only an image's own object describes its rights: a page's author isn't always the photographer.
               const owner = typeof item === 'object' ? item : /ImageObject/.test(String(n['@type'])) ? n : null;
               const rights = rightsFromJsonLd(owner);
-              add(typeof item === 'string' ? item : item?.url ?? item?.contentUrl, 'meta', rights ? { rights } : {});
+              add(typeof item === 'string' ? item : item?.url ?? item?.contentUrl, 'meta', { ...(rights ? { rights } : {}), seo: ['schema'] });
             }
           } else if (typeof v === 'object') walk(v);
         }

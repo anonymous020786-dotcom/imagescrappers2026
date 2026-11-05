@@ -1,5 +1,6 @@
-// Page image audit: accessibility and performance findings for the images on a page.
+// Page image audit: accessibility, performance and image SEO findings for the images on a page.
 // Pure functions (no browser APIs) so the rules are unit-tested in Node.
+import { baseNameFromUrl } from './utils.js';
 
 // Element sources whose audit facts come from a real <img> on the page.
 const ELEMENT_SOURCES = new Set(['img', 'srcset', 'picture', 'lazy']);
@@ -9,6 +10,18 @@ const OVERSIZE_FACTOR = 2; // allow 2× for high-DPI screens before calling an i
 const LEGACY_MIN_BYTES = 50 * 1024;
 const LEGACY_MIN_PIXELS = 250_000;
 const WEBP_SAVING = 0.3; // conservative typical saving of WebP over JPEG/PNG, used when not measured
+const ALT_MAX = 125; // screen readers and search engines handle longer alt text poorly
+const DUPLICATE_ALT_MIN = 3; // this many different images on one page sharing an alt text
+const IMAGE_EXT = /\.(jpe?g|jfif|png|gif|webp|avif|svg|bmp|ico|tiff?|heic|heif|jxl)$/i;
+// Alt text that says nothing about the image: "image", "photo 3", "banner-2"…
+const GENERIC_ALT = /^(an? |the )?(image|img|photo|photograph|picture|pic|graphic|banner|icon|logo|thumbnail|thumb|placeholder|untitled|spacer|blank|null|undefined|alt|alt text|default)s?[\s_-]*\d*$/i;
+// File names cameras, phones and tools give by default, and opaque hashes.
+const GENERIC_FILE = [
+  /^(img|dsc[nf]?|dcim|pxl|mvimg|gopr|sam|photo|image|picture|pic|screenshot|screen[-_ ]?shot|scan|whatsapp[-_ ]image|untitled|unnamed|download|file)?[-_ .]*\d[\d_ .-]*$/i,
+  /^(image|img|photo|picture|pic|untitled|unnamed|download|file|default|placeholder|blank|new)$/i,
+  /^[a-f0-9]{16,}$/i,
+  /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i,
+];
 
 export const RULES = {
   'missing-alt': {
@@ -41,12 +54,66 @@ export const RULES = {
     severity: 'info',
     fix: 'Set width and height attributes so the page does not jump while images load.',
   },
+  'weak-alt': {
+    label: 'Alt text says nothing',
+    severity: 'warning',
+    fix: 'Describe what the image shows in a few words. A file name or "image" helps neither screen readers nor image search.',
+  },
+  'stuffed-alt': {
+    label: 'Keyword-stuffed alt text',
+    severity: 'warning',
+    fix: 'Write one natural description. Repeating keywords can count as spam in search engines.',
+  },
+  'long-alt': {
+    label: 'Alt text is very long',
+    severity: 'info',
+    fix: `Keep alt text under about ${ALT_MAX} characters; put longer descriptions in a caption or the page text.`,
+  },
+  'duplicate-alt': {
+    label: 'Same alt text on several images',
+    severity: 'info',
+    fix: 'Give each image its own description so search engines and screen readers can tell them apart.',
+  },
+  'generic-filename': {
+    label: 'Non-descriptive file name',
+    severity: 'info',
+    fix: 'Rename the file to describe the image with hyphenated words (for example red-leather-sofa.jpg); search engines read file names.',
+  },
 };
 
 export const SEVERITY_ORDER = { error: 0, warning: 1, info: 2 };
 
 function issue(rule, detail, savingBytes = 0) {
   return { rule, severity: RULES[rule].severity, detail, savingBytes: Math.max(0, Math.round(savingBytes)) };
+}
+
+const quote = (text) => `"${text.length > 60 ? `${text.slice(0, 60)}…` : text}"`;
+const altText = (img) => (img.alt ?? '').trim().replace(/\s+/g, ' ');
+const isGenericFile = (name) => GENERIC_FILE.some((re) => re.test(name));
+
+// The file name search engines see. Image CDNs and resizers often carry the real file in a query parameter.
+export function imageFileName(url) {
+  if (!/^https?:/i.test(url ?? '')) return '';
+  try {
+    const u = new URL(url);
+    const inner = [...u.searchParams.values()].find((v) => IMAGE_EXT.test(v.split(/[?#]/)[0]));
+    return baseNameFromUrl(inner ? new URL(inner, u).href : url);
+  } catch {
+    return '';
+  }
+}
+
+// Alt text that is present but unhelpful.
+function altIssues(text) {
+  const out = [];
+  if (GENERIC_ALT.test(text)) out.push(issue('weak-alt', `alt=${quote(text)}`));
+  else if (IMAGE_EXT.test(text) || isGenericFile(text)) out.push(issue('weak-alt', `alt=${quote(text)} is a file name`));
+  const counts = new Map();
+  for (const w of text.toLowerCase().match(/\p{L}{4,}/gu) ?? []) counts.set(w, (counts.get(w) ?? 0) + 1);
+  const [word, times] = [...counts].sort((x, y) => y[1] - x[1])[0] ?? [];
+  if (times >= 3) out.push(issue('stuffed-alt', `"${word}" appears ${times} times`));
+  if (text.length > ALT_MAX) out.push(issue('long-alt', `${text.length} characters`));
+  return out;
 }
 
 // Findings for one image. `img` is a scan result (optionally analyzed: bytes, type, width, height,
@@ -61,6 +128,11 @@ export function auditImage(img) {
 
   if (isElement && !a.hasAlt && shown) {
     out.push(issue('missing-alt', 'No alt attribute'));
+  }
+  if (isElement && a.hasAlt && shown && altText(img)) out.push(...altIssues(altText(img)));
+  if (isElement && shown) {
+    const name = imageFileName(img.url);
+    if (name && isGenericFile(name)) out.push(issue('generic-filename', name));
   }
 
   if (visible && img.width && img.height) {
@@ -105,12 +177,29 @@ export function auditImage(img) {
   return out;
 }
 
+// Different images on one page that share the same (otherwise reasonable) alt text.
+function duplicateAlts(images) {
+  const groups = new Map();
+  for (const img of images) {
+    const text = altText(img);
+    if (!text || !img.audit?.hasAlt || !ELEMENT_SOURCES.has(img.source) || GENERIC_ALT.test(text)) continue;
+    const key = `${img.pageUrl ?? ''}\n${text.toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, new Set());
+    groups.get(key).add(img);
+  }
+  const dupes = new Map();
+  for (const set of groups.values()) if (set.size >= DUPLICATE_ALT_MIN) for (const img of set) dupes.set(img, set.size);
+  return dupes;
+}
+
 // Audit a whole page: per-image findings (worst first) plus a summary per rule.
 export function auditImages(images) {
   const items = [];
   const byRule = Object.fromEntries(Object.keys(RULES).map((r) => [r, { count: 0, savingBytes: 0 }]));
+  const dupes = duplicateAlts(images);
   for (const img of images) {
     const issues = auditImage(img);
+    if (dupes.has(img)) issues.push(issue('duplicate-alt', `${quote(altText(img))} is used on ${dupes.get(img)} images`));
     if (!issues.length) continue;
     issues.sort((x, y) => SEVERITY_ORDER[x.severity] - SEVERITY_ORDER[y.severity]);
     for (const i of issues) {
@@ -128,21 +217,27 @@ export function auditImages(images) {
   return { items, byRule, total: images.length, withIssues: items.length, savingBytes };
 }
 
+function tally(row, severity) {
+  if (severity === 'error') row.errors++;
+  else if (severity === 'warning') row.warnings++;
+  else row.notes++;
+}
+
 // One row per page, biggest possible saving first. Each image counts once, on the first page it was found.
-export function auditByPage(report) {
+// `pageFindings` (from seo.js) adds each page's own findings, such as a missing social image.
+export function auditByPage(report, pageFindings = []) {
   const pages = new Map();
+  const rowFor = (page, title) => {
+    if (!pages.has(page)) pages.set(page, { page, title: title ?? '', images: 0, errors: 0, warnings: 0, notes: 0, savingBytes: 0 });
+    return pages.get(page);
+  };
   for (const { img, issues } of report.items) {
-    const page = img.pageUrl || 'unknown page';
-    if (!pages.has(page)) pages.set(page, { page, title: img.pageTitle ?? '', images: 0, errors: 0, warnings: 0, notes: 0, savingBytes: 0 });
-    const row = pages.get(page);
+    const row = rowFor(img.pageUrl || 'unknown page', img.pageTitle);
     row.images++;
     row.savingBytes += Math.max(...issues.map((i) => i.savingBytes));
-    for (const i of issues) {
-      if (i.severity === 'error') row.errors++;
-      else if (i.severity === 'warning') row.warnings++;
-      else row.notes++;
-    }
+    for (const i of issues) tally(row, i.severity);
   }
+  for (const f of pageFindings) tally(rowFor(f.page, f.title), f.severity);
   return [...pages.values()].sort((x, y) => y.savingBytes - x.savingBytes || y.errors - x.errors || y.warnings - x.warnings || y.notes - x.notes);
 }
 
@@ -158,8 +253,9 @@ export function pageAuditToCSV(pages) {
   return rows.map((r) => r.map(csvCell).join(',')).join('\n');
 }
 
-export function auditToCSV(report) {
+export function auditToCSV(report, pageFindings = []) {
   const rows = [['url', 'page', 'issue', 'severity', 'detail', 'estimated_saving_bytes', 'how_to_fix']];
+  for (const f of pageFindings) rows.push([f.page, f.page, f.label, f.severity, f.detail, 0, f.fix]);
   for (const { img, issues } of report.items) {
     for (const i of issues) {
       rows.push([img.url, img.pageUrl ?? '', RULES[i.rule].label, i.severity, i.detail, i.savingBytes, RULES[i.rule].fix]);

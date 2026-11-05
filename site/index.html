@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Image Scraper Pro – Free Bulk Image Downloader Extension</title>
+  <meta name="description" content="Find, filter and bulk-download every image on any page, or crawl a whole site. Free, open-source extension for Chrome, Edge, Firefox and Safari, with image SEO audit.">
+  <meta name="keywords" content="image downloader, image scraper, bulk image download, download all images, image extractor, chrome extension, firefox add-on, image SEO, alt text checker, image sitemap">
+  <link rel="canonical" href="{{SITE_URL}}/">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="theme-color" content="#5b4ae6">
+  <meta name="color-scheme" content="light dark">
+  <meta name="author" content="Image Scraper Pro">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Image Scraper Pro">
+  <meta property="og:title" content="Image Scraper Pro – Find and download every image on any page">
+  <meta property="og:description" content="Free, open-source image downloader and image SEO audit for every major browser. Bulk download, ZIP, crawl whole sites. No account, no tracking.">
+  <meta property="og:url" content="{{SITE_URL}}/">
+  <meta property="og:image" content="{{SITE_URL}}/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Image Scraper Pro: find, filter and bulk-download every image on any page">
+  <meta property="og:locale" content="en_US">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Image Scraper Pro – Find and download every image on any page">
+  <meta name="twitter:description" content="Free, open-source image downloader and image SEO audit for Chrome, Edge, Firefox, Brave, Opera, Vivaldi and Safari.">
+  <meta name="twitter:image" content="{{SITE_URL}}/assets/og-image.png">
+  <meta name="twitter:image:alt" content="Image Scraper Pro: find, filter and bulk-download every image on any page">
+
+  <link rel="icon" href="/assets/icon32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="/assets/icon128.png" sizes="128x128" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/icon128.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="preload" as="image" href="/assets/screenshot-1.png" fetchpriority="high">
+  <link rel="stylesheet" href="/styles.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "{{SITE_URL}}/#app",
+        "name": "Image Scraper Pro",
+        "applicationCategory": "BrowserApplication",
+        "applicationSubCategory": "Image downloader",
+        "operatingSystem": "Chrome, Microsoft Edge, Firefox, Brave, Opera, Vivaldi, Safari",
+        "softwareVersion": "{{VERSION}}",
+        "description": "Browser extension that finds every image on a web page — img, srcset, lazy-loaded, CSS backgrounds, SVG, canvas, Shadow DOM and iframes — and lets you filter, preview, audit and bulk-download them, or crawl a whole website.",
+        "url": "{{SITE_URL}}/",
+        "downloadUrl": "https://github.com/anonymous020786-dotcom/imagescrappers2026/releases/latest",
+        "installUrl": "https://github.com/anonymous020786-dotcom/imagescrappers2026/releases/latest",
+        "screenshot": [
+          "{{SITE_URL}}/assets/screenshot-1.png",
+          "{{SITE_URL}}/assets/screenshot-3.png",
+          "{{SITE_URL}}/assets/screenshot-4.png"
+        ],
+        "image": "{{SITE_URL}}/assets/og-image.png",
+        "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "Detects img, srcset, picture, lazy-load, CSS background, pseudo-element, SVG, canvas, video poster, Open Graph and JSON-LD images",
+          "Shadow DOM and iframe scanning, auto-scroll and live mode",
+          "Filters by size, type, shape, domain, colour and file size",
+          "Bulk download and ZIP with file-name templates",
+          "Website crawler with sitemap.xml and robots.txt support",
+          "Image SEO audit: alt text, file names, social images, structured data",
+          "Google image sitemap export",
+          "Format conversion, resize, crop, watermark and metadata removal"
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "{{SITE_URL}}/#website",
+        "url": "{{SITE_URL}}/",
+        "name": "Image Scraper Pro",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "{{SITE_URL}}/#faq",
+        "mainEntity": [
+          { "@type": "Question", "name": "Is Image Scraper Pro free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. It is free and open source under the GPL-3.0 licence, with no account, no ads and no paid tier." } },
+          { "@type": "Question", "name": "Does the extension collect my data?", "acceptedAnswer": { "@type": "Answer", "text": "No. Everything runs in your browser. There is no analytics, no tracking and nothing is sent to the developer. Only reverse image search, when you choose it, opens the search engine you pick." } },
+          { "@type": "Question", "name": "Which browsers are supported?", "acceptedAnswer": { "@type": "Answer", "text": "Chrome, Microsoft Edge, Brave, Opera, Vivaldi, Firefox (desktop and Android, version 121+) and Safari 16.4+ on macOS, all from the same Manifest V3 code." } },
+          { "@type": "Question", "name": "How do I install it from the ZIP file?", "acceptedAnswer": { "@type": "Answer", "text": "Unzip the download, open chrome://extensions (or edge://extensions), turn on Developer mode, click Load unpacked and choose the unzipped folder. In Firefox, open about:debugging, choose This Firefox and click Load Temporary Add-on." } },
+          { "@type": "Question", "name": "What does the image SEO audit check?", "acceptedAnswer": { "@type": "Answer", "text": "Missing, generic, keyword-stuffed or overly long alt text, alt text reused across images, non-descriptive file names, missing or undersized Open Graph and Twitter images, missing structured-data images, oversized files, images that could be WebP, and lazy-loading mistakes. It can also export a Google image sitemap." } },
+          { "@type": "Question", "name": "Can it download images from a whole website?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. The bulk scraper accepts thousands of URLs, and the crawler follows links, pagination and sitemap.xml with depth, scope and speed controls. It respects robots.txt by default." } }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header" id="top">
+    <nav class="wrap nav" aria-label="Main">
+      <a class="brand" href="/" aria-label="Image Scraper Pro home">
+        <img src="/assets/icon128.png" alt="" width="34" height="34">
+        Image Scraper Pro
+      </a>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#seo">SEO audit</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#download">Download</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+      <div class="nav-cta">
+        <a class="btn btn-sm gh" href="https://github.com/anonymous020786-dotcom/imagescrappers2026" rel="noopener">GitHub</a>
+        <a class="btn btn-sm btn-primary" href="#download">Get it free</a>
+      </div>
+      <button class="menu-btn" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Open menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap hero-grid">
+        <div>
+          <a class="pill" href="#seo"><b>NEW</b> Image SEO audit &amp; image sitemaps</a>
+          <h1 id="hero-title">Find and download <span class="grad-text">every image</span> on any web page</h1>
+          <p class="lead">Image Scraper Pro finds the images other tools miss — lazy-loaded, CSS backgrounds, SVG, canvas, Shadow DOM and iframes — then lets you filter, audit and bulk-download them in one click.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-chrome-{{VERSION}}.zip" data-dl="chrome">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>
+              Download for Chrome
+            </a>
+            <a class="btn" href="#download">Edge, Firefox, Safari &amp; more</a>
+          </div>
+          <ul class="trust" aria-label="Highlights">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>Free &amp; open source</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>No account</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>No tracking</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>Manifest V3</li>
+          </ul>
+        </div>
+        <figure class="browser-frame" style="margin: 0 auto;">
+          <div class="browser-bar" aria-hidden="true"><span></span><span></span><span></span><em>Image Scraper Pro — Dashboard</em></div>
+          <img src="/assets/screenshot-1.png" width="1280" height="800" fetchpriority="high"
+               alt="Image Scraper Pro dashboard showing a grid of landscape photos found on a page, with size, type and source filters in the sidebar and download buttons at the bottom">
+        </figure>
+      </div>
+    </section>
+
+    <div class="browsers wrap">
+      <p>One extension, every major browser</p>
+      <ul class="browser-list">
+        <li>Chrome</li><li>Edge</li><li>Firefox</li><li>Brave</li><li>Opera</li><li>Vivaldi</li><li>Safari</li>
+      </ul>
+    </div>
+
+    <section aria-label="At a glance" style="padding-bottom: 0;">
+      <div class="wrap">
+        <ul class="stats">
+          <li class="reveal"><strong class="grad-text">110+</strong><span>features</span></li>
+          <li class="reveal"><strong class="grad-text">20+</strong><span>ways to find images</span></li>
+          <li class="reveal"><strong class="grad-text">7</strong><span>browsers supported</span></li>
+          <li class="reveal"><strong class="grad-text">0</strong><span>trackers or accounts</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Features</span>
+          <h2 id="features-title">Everything you need to collect images — at any scale</h2>
+          <p class="lead">From a single photo to a 50,000-page site crawl, Image Scraper Pro is built to be thorough, fast and private.</p>
+        </div>
+        <div class="features">
+          <article class="card reveal">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <h3>Finds images others miss</h3>
+            <p>Highest-resolution <code>srcset</code>, lazy-load attributes, CSS backgrounds, <code>::before</code>/<code>::after</code>, inline SVG, canvas, video posters, Shadow DOM and every iframe.</p>
+          </article>
+          <article class="card reveal">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg></div>
+            <h3>Smart filters</h3>
+            <p>Filter by dimensions, file type, shape, file size, domain and main colour, search alt text with regex, and hide tracking pixels and ad images automatically.</p>
+          </article>
+          <article class="card reveal">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg></div>
+            <h3>Bulk download &amp; ZIP</h3>
+            <p>Download hundreds of images with progress, pause and resume, or pack them into one ZIP — split automatically for huge sets — with your own file-name templates.</p>
+          </article>
+          <article class="card reveal">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg></div>
+            <h3>Crawl whole websites</h3>
+            <p>Paste thousands of URLs or crawl a site via links, pagination and <code>sitemap.xml</code>. Depth, scope and speed controls, and <code>robots.txt</code> respected by default.</p>
+          </article>
+          <article class="card reveal">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/></svg></div>
+            <h3>Edit, convert &amp; clean</h3>
+            <p>Convert to WebP, PNG or JPEG, resize, crop, watermark and hit a target file size. Strip EXIF and GPS data before you share a photo.</p>
+          </article>
+          <article class="card reveal">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></div>
+            <h3>Private by design</h3>
+            <p>Everything runs inside your browser. No account, no analytics, no remote servers. Open source, so you can check every line.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="alt-bg" aria-labelledby="tour-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Take the tour</span>
+          <h2 id="tour-title">Built for designers, marketers, researchers and developers</h2>
+        </div>
+        <div class="showcase">
+          <div class="show-row">
+            <div class="show-text reveal">
+              <h3>Select exactly what you need</h3>
+              <p>Shift-click ranges, select all, invert, then filter by size presets like ≥800 px or HD. Analyze fetches the exact byte size, real type and true dimensions of every image.</p>
+              <ul class="checks">
+                <li>Perceptual-hash duplicate detection</li>
+                <li>Keep the best copy of each duplicate group</li>
+                <li>Sort by resolution, size, name, type or domain</li>
+              </ul>
+            </div>
+            <div class="shot reveal"><img src="/assets/screenshot-2.png" width="1280" height="800" loading="lazy" decoding="async" alt="A filtered selection of photos with their pixel sizes and file sizes shown after analysis"></div>
+          </div>
+          <div class="show-row flip">
+            <div class="show-text reveal">
+              <h3>Preview every detail</h3>
+              <p>Zoom up to 12×, pan, browse with the arrow keys and see the full metadata: dimensions, type, size, alt text, source, colour palette, camera data and licence information.</p>
+              <ul class="checks">
+                <li>Reverse image search with Google Lens, Bing, TinEye or Yandex</li>
+                <li>Jump to the image on the original page</li>
+                <li>Copy the image or its URL in one click</li>
+              </ul>
+            </div>
+            <div class="shot reveal"><img src="/assets/screenshot-3.png" width="1280" height="800" loading="lazy" decoding="async" alt="Lightbox preview of a landscape photo with a metadata panel listing its size, type and source"></div>
+          </div>
+          <div class="show-row">
+            <div class="show-text reveal">
+              <h3>Scrape an entire website</h3>
+              <p>The crawler follows links, "next page" buttons and sitemaps, with fast HTML mode for hundreds of pages per minute or full-render mode for JavaScript-built galleries.</p>
+              <ul class="checks">
+                <li>Pause, resume and stop with a live activity log</li>
+                <li>URL pattern generator: <code>photo[001-500].jpg</code></li>
+                <li>Send results straight to the dashboard</li>
+              </ul>
+            </div>
+            <div class="shot reveal"><img src="/assets/screenshot-4.png" width="1280" height="800" loading="lazy" decoding="async" alt="The website crawler with start URLs, depth and scope settings and a live log of pages crawled"></div>
+          </div>
+          <div class="show-row flip">
+            <div class="show-text reveal">
+              <h3>One click from the toolbar</h3>
+              <p>The popup shows an instant image count and the largest images on the page. Quick download uses your saved filters and naming rules — or press <code>Alt+Shift+D</code>.</p>
+              <ul class="checks">
+                <li>Right-click menus for single images and linked pages</li>
+                <li>Side panel that follows the tab you are on</li>
+                <li>Light and dark themes, settings synced across devices</li>
+              </ul>
+            </div>
+            <div class="shot reveal"><img src="/assets/screenshot-5.png" width="1280" height="800" loading="lazy" decoding="async" alt="The toolbar popup over a web page, showing the number of images found and the largest ones as thumbnails"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="seo" aria-labelledby="seo-title">
+      <div class="wrap seo-grid">
+        <div class="reveal">
+          <span class="eyebrow">Image SEO audit <span class="new-tag">NEW</span></span>
+          <h2 id="seo-title">Rank higher in image search, and look great when shared</h2>
+          <p class="lead">Click <strong>Audit</strong> on any page — or on a whole crawled site — to see what is holding its images back, with a clear fix for every finding.</p>
+          <ul class="checks">
+            <li><strong>Alt text quality</strong> — missing, generic ("image", "IMG_1234.jpg"), keyword-stuffed, too long or reused</li>
+            <li><strong>Descriptive file names</strong> — flags camera defaults and hashes, even behind image CDNs</li>
+            <li><strong>Social sharing images</strong> — og:image and Twitter cards present, 1200×630, 1.91:1, https</li>
+            <li><strong>Structured data</strong> — an image in JSON-LD or microdata for rich results</li>
+            <li><strong>Speed</strong> — oversized files, WebP savings (measured), lazy-loading and layout shift</li>
+            <li><strong>Google image sitemap</strong> — export a ready-to-submit <code>.xml</code> for Search Console</li>
+          </ul>
+        </div>
+        <div class="audit reveal" role="img" aria-label="Example audit report listing a missing social image, a generic file name and weak alt text, with a button to export an image sitemap">
+          <div class="audit-head"><strong>Image audit &amp; SEO</strong><span class="muted">✕</span></div>
+          <p class="audit-sum">6 of 24 images have findings · about 1.8 MB could be saved. 2 page SEO findings.</p>
+          <div class="chips">
+            <span class="chip on">All findings <b>8</b></span>
+            <span class="chip">No social sharing image <b>1</b></span>
+            <span class="chip">Alt text says nothing <b>2</b></span>
+            <span class="chip">Non-descriptive file name <b>3</b></span>
+            <span class="chip">Oversized image <b>2</b></span>
+          </div>
+          <div class="row"><div class="thumb page">🌐</div><div class="row-body"><span class="row-url">example-shop.com/sofas/</span><span class="sev error">error</span>No social sharing image <span class="muted">— No og:image or twitter:image</span></div></div>
+          <div class="row"><div class="thumb"></div><div class="row-body"><span class="row-url">cdn.example-shop.com/uploads/IMG_20240518_101522.jpg</span><span class="sev warning">warning</span>Alt text says nothing <span class="muted">— alt="image"</span><br><span class="sev info">info</span>Non-descriptive file name</div></div>
+          <div class="row"><div class="thumb t2"></div><div class="row-body"><span class="row-url">cdn.example-shop.com/hero-living-room.jpg</span><span class="sev warning">warning</span>Oversized image <span class="muted">— 4000×2667 shown at 1200×800</span></div></div>
+          <div class="audit-foot"><span class="fake-btn">Image sitemap</span><span class="fake-btn">Measure WebP savings</span><span class="fake-btn primary">Export CSV</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="alt-bg" aria-labelledby="how-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">How it works</span>
+          <h2 id="how-title">From page to folder in three steps</h2>
+        </div>
+        <ol class="steps">
+          <li class="reveal"><h3>Open any page</h3><p>Click the toolbar icon or press <code>Alt+Shift+I</code>. The extension scans every frame and counts the images instantly.</p></li>
+          <li class="reveal"><h3>Filter &amp; review</h3><p>Open the dashboard, narrow the results with filters, preview in the lightbox and run the SEO audit if you like.</p></li>
+          <li class="reveal"><h3>Download</h3><p>Save the selection as files or a ZIP, converted and named the way you want — or export a list, PDF, contact sheet or image sitemap.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="download" aria-labelledby="download-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Download</span>
+          <h2 id="download-title">Free for every major browser</h2>
+          <p class="lead">Version {{VERSION}} · Manifest V3 · GPL-3.0. Pick your browser to download a ready-to-install package.</p>
+        </div>
+        <div class="dl-grid">
+          <a class="dl featured" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-chrome-{{VERSION}}.zip" data-dl="chrome"><strong>Chrome</strong><span>Recommended · side panel</span><em>Download .zip →</em></a>
+          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-edge-{{VERSION}}.zip" data-dl="edge"><strong>Microsoft Edge</strong><span>Side panel supported</span><em>Download .zip →</em></a>
+          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-firefox-{{VERSION}}.zip" data-dl="firefox"><strong>Firefox</strong><span>Desktop &amp; Android, 121+</span><em>Download .zip →</em></a>
+          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-brave-{{VERSION}}.zip" data-dl="brave"><strong>Brave</strong><span>Chromium build</span><em>Download .zip →</em></a>
+          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-opera-{{VERSION}}.zip" data-dl="opera"><strong>Opera</strong><span>Chromium build</span><em>Download .zip →</em></a>
+          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-vivaldi-{{VERSION}}.zip" data-dl="vivaldi"><strong>Vivaldi</strong><span>Chromium build</span><em>Download .zip →</em></a>
+          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-safari-{{VERSION}}.zip" data-dl="safari"><strong>Safari</strong><span>macOS, Safari 16.4+ (Xcode)</span><em>Download .zip →</em></a>
+          <a class="dl" href="https://github.com/anonymous020786-dotcom/imagescrappers2026"><strong>Source code</strong><span>Build it yourself, no dependencies</span><em>View on GitHub →</em></a>
+        </div>
+        <p class="install-note">
+          <strong>Install in Chrome, Edge, Brave, Opera or Vivaldi:</strong> unzip, open <code>chrome://extensions</code>, turn on <em>Developer mode</em>, click <em>Load unpacked</em> and pick the folder.
+          <a href="https://github.com/anonymous020786-dotcom/imagescrappers2026/blob/main/DEPLOY.md">Step-by-step guide for every browser</a>
+        </p>
+      </div>
+    </section>
+
+    <section id="faq" class="alt-bg" aria-labelledby="faq-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">FAQ</span>
+          <h2 id="faq-title">Frequently asked questions</h2>
+        </div>
+        <div class="faq">
+          <details class="reveal" open>
+            <summary>Is Image Scraper Pro free?</summary>
+            <p>Yes. It is free and open source under the GPL-3.0 licence, with no account, no ads and no paid tier.</p>
+          </details>
+          <details class="reveal">
+            <summary>Does the extension collect my data?</summary>
+            <p>No. Everything — scanning, editing, metadata removal, the SEO audit, PDFs and collections — runs in your browser. There is no analytics or tracking, and nothing is sent to the developer. Only reverse image search, when you choose it, opens the search engine you pick. Read the <a href="/privacy/">privacy policy</a>.</p>
+          </details>
+          <details class="reveal">
+            <summary>Which browsers are supported?</summary>
+            <p>Chrome, Microsoft Edge, Brave, Opera, Vivaldi, Firefox (desktop and Android, version 121+) and Safari 16.4+ on macOS, all built from the same Manifest V3 code.</p>
+          </details>
+          <details class="reveal">
+            <summary>How do I install it from the ZIP file?</summary>
+            <p>Unzip the download, open <code>chrome://extensions</code> (or <code>edge://extensions</code>), turn on Developer mode, click <em>Load unpacked</em> and choose the unzipped folder. In Firefox, open <code>about:debugging</code>, choose <em>This Firefox</em> and click <em>Load Temporary Add-on</em>. The <a href="https://github.com/anonymous020786-dotcom/imagescrappers2026/blob/main/DEPLOY.md">install guide</a> covers every browser.</p>
+          </details>
+          <details class="reveal">
+            <summary>What does the image SEO audit check?</summary>
+            <p>Missing, generic, keyword-stuffed, overly long or reused alt text; non-descriptive file names; missing or undersized Open Graph and Twitter images; missing structured-data images; oversized files; images that could be WebP; and lazy-loading mistakes. It exports a CSV report and a Google image sitemap.</p>
+          </details>
+          <details class="reveal">
+            <summary>Can it download images from a whole website?</summary>
+            <p>Yes. The bulk scraper accepts thousands of URLs, and the crawler follows links, pagination and <code>sitemap.xml</code> with depth, scope and speed controls. It respects <code>robots.txt</code> by default.</p>
+          </details>
+          <details class="reveal">
+            <summary>Am I allowed to use the images I download?</summary>
+            <p>That depends on each image's licence and the website's terms. The extension shows the creator, credit and licence a page or file states, and records each image's source in ZIP downloads, but it is not legal advice. Please respect copyright.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="final" aria-labelledby="final-title">
+      <div class="wrap">
+        <div class="final-box reveal">
+          <h2 id="final-title">Start collecting images in seconds</h2>
+          <p>Free, private and open source. No sign-up, no limits.</p>
+          <div class="cta-row">
+            <a class="btn btn-white" href="https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-chrome-{{VERSION}}.zip" data-dl="chrome">Download for Chrome</a>
+            <a class="btn btn-ghost" href="#download">Other browsers</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="foot-grid">
+        <div>
+          <a class="brand" href="/"><img src="/assets/icon128.png" alt="" width="34" height="34" loading="lazy">Image Scraper Pro</a>
+          <p style="margin-top: 12px; max-width: 360px;">The free, open-source image downloader and image SEO audit for every major browser.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#seo">Image SEO audit</a></li>
+            <li><a href="#download">Download</a></li>
+            <li><a href="#faq">FAQ</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="https://github.com/anonymous020786-dotcom/imagescrappers2026">GitHub</a></li>
+            <li><a href="https://github.com/anonymous020786-dotcom/imagescrappers2026/blob/main/DEPLOY.md">Install guide</a></li>
+            <li><a href="https://github.com/anonymous020786-dotcom/imagescrappers2026/releases">Releases</a></li>
+            <li><a href="https://github.com/anonymous020786-dotcom/imagescrappers2026/issues">Report an issue</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Legal</h4>
+          <ul>
+            <li><a href="/privacy/">Privacy policy</a></li>
+            <li><a href="https://github.com/anonymous020786-dotcom/imagescrappers2026/blob/main/LICENSE">GPL-3.0 licence</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <span>© <span id="year">2026</span> Image Scraper Pro. Open source under GPL-3.0.</span>
+        <span>Please respect website terms and copyright when downloading images.</span>
+      </div>
+    </div>
+  </footer>
+  <script src="/main.js" defer></script>
+</body>
+</html>

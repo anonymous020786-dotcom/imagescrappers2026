@@ -16,6 +16,7 @@ import {
 } from '../lib/collections.js';
 import { readMetadata, readRights } from '../lib/exif.js';
 import { RULES, auditByPage, auditImages, auditToCSV, pageAuditToCSV } from '../lib/audit.js';
+import { PAGE_RULES, auditPages as auditPageSeo, imageSitemaps, socialSizesUnknown } from '../lib/seo.js';
 import { openEditor } from './editor.js';
 import { canExtractFrames, openFrames } from './frames.js';
 import { ZipWriter } from '../lib/zip.js';
@@ -761,7 +762,7 @@ async function saveHistory(title, url) {
     images: state.images
       .filter((i) => !i.url.startsWith('data:'))
       .slice(0, settings.historyImageLimit || Infinity)
-      .map(({ url: u, type, width, height, alt, source, sources, pageUrl, bytes, rights }) => ({ url: u, type, width, height, alt, source, sources, pageUrl, bytes, rights })),
+      .map(({ url: u, type, width, height, alt, source, sources, pageUrl, bytes, rights, seo, seoRefs }) => ({ url: u, type, width, height, alt, source, sources, pageUrl, bytes, rights, seo, seoRefs })),
   };
   const next = [entry, ...history.filter((h) => h.id !== entry.id)].slice(0, settings.historyLimit);
   await api.storage.local.set({ [HISTORY_KEY]: next }).catch(() => {});
@@ -1076,6 +1077,7 @@ $('exportMenu').onclick = async (e) => {
     return toast(`Copied ${(list.length - skipped).toLocaleString()} images${skipped ? ` (${skipped} inline images left out)` : ''}`);
   }
   if (fmt === 'pdf') return openPdfDialog(list);
+  if (fmt === 'sitemap') return saveImageSitemap(list);
   if (fmt === 'sheet') {
     if (!(await needAllSites())) return;
     return createContactSheet(list);
@@ -1389,6 +1391,7 @@ $('lbEdit').onclick = async () => {
 
 let auditReport = null;
 let auditPages = [];
+let auditPageFindings = []; // page-level SEO findings (social and structured-data images)
 let auditRule = '';
 let auditPage = ''; // show only this page's images
 let auditView = 'image'; // image | page
@@ -1398,12 +1401,18 @@ function auditTargets() {
 }
 
 function renderAudit() {
-  const report = (auditReport = auditImages(auditTargets()));
+  const targets = auditTargets();
+  const report = (auditReport = auditImages(targets));
+  // Page checks need the meta tags and JSON-LD, which tab scans skip when "meta images" is off.
+  const findings = (auditPageFindings = settings.scanMeta || state.mode === 'import' ? auditPageSeo(targets) : []);
   const saving = report.savingBytes ? ` · about ${formatBytes(report.savingBytes)} could be saved` : '';
+  const pageNote = findings.length ? ` ${findings.length.toLocaleString()} page SEO finding${findings.length === 1 ? '' : 's'}.` : '';
+  const sizeNote = findings.length && socialSizesUnknown(targets) ? ' Run Analyze to check social image sizes.' : '';
   $('auditSummary').textContent = report.total
-    ? `${report.withIssues.toLocaleString()} of ${report.total.toLocaleString()} images have findings${saving}.`
+    ? `${report.withIssues.toLocaleString()} of ${report.total.toLocaleString()} images have findings${saving}.${pageNote}${sizeNote}`
     : 'No images to check. Scan a page first.';
-  auditPages = auditByPage(report);
+  $('auditSitemap').disabled = !report.total;
+  auditPages = auditByPage(report, findings);
   $('auditViewWrap').classList.toggle('hidden', auditPages.length < 2);
   if (auditPages.length < 2) auditView = 'image';
   $('auditView').value = auditView;
@@ -1420,11 +1429,16 @@ function renderAudit() {
     };
     chips.append(chip);
   }
-  const ruleIds = Object.keys(RULES).filter((id) => report.byRule[id]?.count);
+  const pageFindings = auditPageFindings.filter((f) => !auditPage || f.page === auditPage);
+  const pageCounts = {};
+  for (const f of pageFindings) pageCounts[f.rule] = (pageCounts[f.rule] ?? 0) + 1;
+  const ruleOf = (id) => RULES[id] ?? PAGE_RULES[id];
+  const countOf = (id) => (RULES[id] ? report.byRule[id].count : pageCounts[id]);
+  const ruleIds = [...Object.keys(PAGE_RULES).filter((id) => pageCounts[id]), ...Object.keys(RULES).filter((id) => report.byRule[id]?.count)];
   if (auditRule && !ruleIds.includes(auditRule)) auditRule = '';
   for (const id of ['', ...ruleIds]) {
-    const chip = el('button', `chip${id === auditRule ? ' on' : ''}${id && RULES[id].severity === 'error' ? ' error' : ''}`);
-    chip.append(id ? RULES[id].label : 'All findings', el('span', 'n', String(id ? report.byRule[id].count : report.withIssues)));
+    const chip = el('button', `chip${id === auditRule ? ' on' : ''}${id && ruleOf(id).severity === 'error' ? ' error' : ''}`);
+    chip.append(id ? ruleOf(id).label : 'All findings', el('span', 'n', String(id ? countOf(id) : report.withIssues + pageFindings.length)));
     chip.onclick = () => {
       auditRule = id;
       renderAudit();
@@ -1433,6 +1447,22 @@ function renderAudit() {
   }
   const list = $('auditList');
   list.replaceChildren();
+  for (const f of pageFindings.filter((x) => !auditRule || x.rule === auditRule).slice(0, 500)) {
+    const row = el('div', 'audit-item page-finding');
+    row.append(el('span', 'page-icon', '🌐'));
+    const body = el('div', 'body');
+    body.append(el('span', 'url', f.title || f.page));
+    if (f.title) body.append(el('span', 'url muted', f.page));
+    const li = el('li');
+    li.append(el('span', `sev ${f.severity}`, f.severity), f.label);
+    if (f.detail) li.append(el('span', 'muted', ` — ${f.detail}`));
+    const ul = el('ul');
+    ul.append(li);
+    body.append(ul, el('span', 'muted small', f.fix));
+    row.append(body);
+    row.title = f.fix;
+    list.append(row);
+  }
   const items = report.items.filter((it) => (!auditRule || it.issues.some((x) => x.rule === auditRule)) && (!auditPage || it.img.pageUrl === auditPage));
   for (const { img, issues } of items.slice(0, 500)) {
     const row = el('div', 'audit-item');
@@ -1463,8 +1493,8 @@ function renderAudit() {
     list.append(row);
   }
   if (items.length > 500) list.append(el('p', 'muted small', `…and ${items.length - 500} more (all included in the CSV).`));
-  if (report.total && !items.length) list.append(el('p', 'muted small', 'Nothing to report.'));
-  $('auditCsv').disabled = !report.withIssues;
+  if (report.total && !items.length && !pageFindings.length) list.append(el('p', 'muted small', 'Nothing to report.'));
+  $('auditCsv').disabled = !report.withIssues && !pageFindings.length;
 }
 
 function safePath(url) {
@@ -1516,10 +1546,20 @@ $('auditBtn').onclick = () => {
   $('auditDialog').showModal();
 };
 $('auditClose').onclick = () => $('auditDialog').close();
+$('auditSitemap').onclick = () => saveImageSitemap(auditTargets());
+
+// Google image sitemap of the pages the images were found on, ready to submit in Search Console.
+function saveImageSitemap(list) {
+  const files = imageSitemaps(list);
+  if (!files.length) return toast('No images with a page address to put in a sitemap');
+  const name = applyTemplate('{pagedomain}_{date}_image-sitemap', { url: '', pageUrl: state.tab?.url ?? list[0]?.pageUrl });
+  files.forEach((x, i) => saveBlob(new Blob([x], { type: 'application/xml' }), `${name}${files.length > 1 ? `-${i + 1}` : ''}.xml`));
+  toast(`Saved an image sitemap for ${list.length.toLocaleString()} images${files.length > 1 ? ` in ${files.length} files` : ''}`);
+}
 $('auditCsv').onclick = () => {
   if (!auditReport) return;
   const name = applyTemplate('{pagedomain}_{date}_image-audit', { url: '', pageUrl: state.tab?.url ?? auditReport.items[0]?.img.pageUrl });
-  const csv = auditView === 'page' ? pageAuditToCSV(auditPages) : auditToCSV(auditReport);
+  const csv = auditView === 'page' ? pageAuditToCSV(auditPages) : auditToCSV(auditReport, auditPageFindings);
   saveBlob(new Blob([csv], { type: 'text/csv' }), `${name}${auditView === 'page' ? '-pages' : ''}.csv`);
 };
 $('auditMeasure').onclick = async () => {

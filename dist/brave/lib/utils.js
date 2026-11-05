@@ -174,6 +174,7 @@ export function dedupe(images, ignoreQuery = false) {
       prev.alt ||= img.alt;
       prev.audit ||= img.audit;
       prev.rights ||= img.rights;
+      if (img.seo) prev.seo = [...new Set([...(prev.seo ?? []), ...img.seo])];
     }
   }
   return [...seen.values()];
