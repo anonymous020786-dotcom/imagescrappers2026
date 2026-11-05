@@ -36,6 +36,8 @@ const stores = {
   firefox: [storeUrl('FIREFOX_STORE_URL'), 'Add to Firefox'],
 };
 const zipUrl = (browser) => `https://github.com/anonymous020786-dotcom/imagescrappers2026/raw/main/dist/image-scraper-pro-${browser}-${version}.zip`;
+// The store pages are the same product: listed as sameAs in the structured data.
+const sameAs = [chromeStore, stores.firefox[0], stores.edge[0]].filter(Boolean);
 const hrefFor = (browser) => stores[browser]?.[0] || zipUrl(browser);
 const ctaFor = (browser) => (stores[browser]?.[0] ? stores[browser][1] : 'Download .zip');
 const fill = (text) =>
@@ -46,6 +48,7 @@ const fill = (text) =>
     .replace(/\{\{HREF:(\w+)\}\}/g, (_, b) => hrefFor(b))
     .replace(/\{\{CTA:(\w+)\}\}/g, (_, b) => ctaFor(b))
     .replaceAll('{{CHROME_BUTTON}}', chromeStore ? 'Add to Chrome' : 'Download for Chrome')
+    .replace(/^[ \t]*\{\{SAME_AS\}\}\n/m, sameAs.length ? `        "sameAs": ${JSON.stringify(sameAs)},\n` : '')
     .replaceAll('{{INSTALL_URL}}', chromeStore || 'https://github.com/anonymous020786-dotcom/imagescrappers2026/releases/latest')
     .replace(/^[ \t]*\{\{SITE_VERIFICATION\}\}\n/m, verification ? `  ${verification}\n` : '');
 
