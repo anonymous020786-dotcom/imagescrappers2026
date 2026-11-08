@@ -156,3 +156,9 @@ test('metadata and broken-image CSVs', () => {
   const broken = brokenToCSV([{ url: 'https://a.test/x.jpg', pageUrl: 'https://a.test/', broken: 'HTTP 404' }, { url: 'https://a.test/ok.jpg' }]).split('\n');
   assert.deepEqual(broken, ['url,page,error', 'https://a.test/x.jpg,https://a.test/,HTTP 404']);
 });
+
+test('optimizeSvg leaves no comment opener behind when comments are nested to rebuild one', async () => {
+  const { optimizeSvg } = await import('../src/lib/svg.js');
+  const { svg } = optimizeSvg('<svg><!<!---->-- hidden --><rect/></svg>');
+  assert.ok(!svg.includes('<!--'), svg);
+});

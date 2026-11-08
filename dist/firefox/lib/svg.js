@@ -13,8 +13,12 @@ export function optimizeSvg(input) {
     kept.push(m);
     return `\u0000${kept.length - 1}\u0000`;
   });
+  // Repeat until stable: removing one comment must not join pieces into a new "<!--" (e.g. "<!<!---->--").
+  for (let prev; prev !== svg; ) {
+    prev = svg;
+    svg = svg.replace(/<!--[\s\S]*?-->/g, '');
+  }
   svg = svg
-    .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<metadata\b[\s\S]*?<\/metadata\s*>/gi, '')
     .replace(/<metadata\b[^>]*\/>/gi, '');
   for (const p of EDITOR_PREFIXES) {
