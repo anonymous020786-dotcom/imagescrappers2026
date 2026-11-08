@@ -1,4 +1,5 @@
 // Pure helpers shared by the dashboard, background worker and unit tests.
+import { colorSortKey } from './props.js';
 import { rightsClass } from './rights.js';
 
 export const IMAGE_TYPES = ['jpg', 'png', 'gif', 'webp', 'svg', 'avif', 'jxl', 'heic', 'bmp', 'ico', 'tiff', 'other'];
@@ -246,6 +247,7 @@ export function filterImages(images, f) {
     if (f.types?.length && !f.types.includes(img.type)) return false;
     if (f.sources?.length && !(img.sources ?? [img.source]).some((s) => f.sources.includes(s))) return false;
     if (f.aspect && f.aspect !== 'any' && aspectOf(img) !== f.aspect) return false;
+    if (f.props && f.props !== 'any' && !hasProperty(img, f.props)) return false;
     if (f.minBytes && img.bytes != null && img.bytes < f.minBytes) return false;
     if (f.maxBytes && img.bytes != null && img.bytes > f.maxBytes) return false;
     if (f.domain && !hostFromUrl(img.url).includes(f.domain.toLowerCase())) return false;
@@ -265,6 +267,18 @@ export function filterImages(images, f) {
   });
 }
 
+// Properties found by Analyze. Unknown (not analyzed yet) never matches, so the filter shows only what is known.
+export function hasProperty(img, prop) {
+  switch (prop) {
+    case 'transparent': return img.transparent === true;
+    case 'opaque': return img.transparent === false;
+    case 'animated': return img.animated === true;
+    case 'still': return img.animated === false;
+    case 'broken': return Boolean(img.broken);
+    default: return true;
+  }
+}
+
 export function sortImages(images, key = 'order', dir = 'asc') {
   const sign = dir === 'desc' ? -1 : 1;
   const get = {
@@ -276,6 +290,8 @@ export function sortImages(images, key = 'order', dir = 'asc') {
     name: (i) => baseNameFromUrl(i.url).toLowerCase(),
     type: (i) => i.type,
     domain: (i) => hostFromUrl(i.url),
+    color: (i) => colorSortKey(i.color),
+    ratio: (i) => (i.width && i.height ? i.width / i.height : 0),
   }[key] ?? ((i) => i.order ?? 0);
   return [...images].sort((a, b) => {
     const va = get(a);

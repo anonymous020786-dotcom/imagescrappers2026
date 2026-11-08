@@ -17,6 +17,7 @@ import { JsonLd } from '@/components/JsonLd';
 import { CountUp } from '@/components/Polish';
 import { UseCaseTabs, type UseCase } from '@/components/UseCaseTabs';
 import { getGuides } from '@/lib/content';
+import { featureCount } from '@/lib/features';
 import { markdownToHtml, plainText } from '@/lib/markdown';
 import { pageMetadata } from '@/lib/metadata';
 import { REPO, chromeButton, ctaFor, hrefFor, installUrl, sameAs, siteUrl, version, type Browser } from '@/lib/site';
@@ -322,7 +323,7 @@ export default function HomePage() {
       <div className="stats-wrap wrap">
         <ul className="stats reveal" aria-label="At a glance">
           {[
-            ['110+', 'features'],
+            [`${Math.floor(featureCount() / 5) * 5}+`, 'features'],
             ['20+', 'ways to find images'],
             ['7', 'browsers supported'],
             ['0', 'trackers in the extension'],
@@ -459,6 +460,11 @@ export default function HomePage() {
               </Link>
             </article>
           </div>
+          <p className="center features-all">
+            <Link className="btn" href="/features/">
+              See all {featureCount()} features in detail →
+            </Link>
+          </p>
         </div>
       </section>
 

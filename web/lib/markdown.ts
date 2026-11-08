@@ -7,7 +7,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 // Headings are raw Markdown, so the id keeps only letters and digits.
 export const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-function inline(text: string) {
+export function inline(text: string) {
   return esc(text)
     .replace(/!\[([^\]]*)\]\((\/[^)\s]+)\)/g, (_, alt: string, src: string) => {
       // Screenshots in guides: responsive sizes through the image CDN (next/image can't run inside Markdown HTML).

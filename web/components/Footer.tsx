@@ -8,7 +8,7 @@ const COLUMNS: { title: string; links: { href: string; label: string; dl?: strin
   {
     title: 'Product',
     links: [
-      { href: '/#features', label: 'Features' },
+      { href: '/features/', label: 'All features' },
       { href: '/#seo', label: 'Image SEO audit' },
       { href: '/#download', label: 'Download' },
       { href: '/guides/', label: 'Guides' },

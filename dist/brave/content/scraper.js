@@ -470,5 +470,67 @@
     return urls.size;
   }
 
-  globalThis.__imageScraper = { scan, autoScroll, highlight, fetchAsDataUrl, watch, pick, count, links };
+  // On-page size inspector: a badge on every visible <img> with its real (natural) size and the size it is shown
+  // at. Red: the file is more than 2× larger than displayed (wasted bytes); amber: shown larger than it is
+  // (blurry); green: well sized. Lives in a Shadow DOM so page styles can't change it, and never takes clicks.
+  let inspector = null;
+  function inspect(on) {
+    if (!on) {
+      if (inspector) {
+        clearInterval(inspector.timer);
+        removeEventListener('resize', inspector.redraw);
+        inspector.host.remove();
+        inspector = null;
+      }
+      return 0;
+    }
+    if (!inspector) {
+      const host = document.createElement('image-scraper-inspector');
+      host.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483646;pointer-events:none;';
+      const root = host.attachShadow({ mode: 'open' });
+      const style = document.createElement('style');
+      style.textContent = `
+        .b { position: absolute; font: 600 11px/1.3 system-ui, sans-serif; color: #fff; padding: 2px 6px; border-radius: 6px;
+             box-shadow: 0 1px 4px rgba(0,0,0,.35); white-space: nowrap; transform: translate(4px, 4px); }
+        .ok { background: #0f9f6e; } .warn { background: #c77700; } .bad { background: #d43a4a; }
+        .o { position: absolute; border: 2px solid; border-radius: 4px; box-sizing: border-box; }
+        .o.bad { border-color: #d43a4a; background: none; } .o.warn { border-color: #c77700; background: none; } .o.ok { border-color: transparent; background: none; }`;
+      const layer = document.createElement('div');
+      root.append(style, layer);
+      document.documentElement.append(host);
+      const redraw = () => draw();
+      inspector = { host, layer, redraw, timer: setInterval(redraw, 1500) };
+      addEventListener('resize', redraw);
+    }
+    return draw();
+
+    function draw() {
+      const { layer } = inspector;
+      const frag = document.createDocumentFragment();
+      let n = 0;
+      for (const img of document.images) {
+        const r = img.getBoundingClientRect();
+        if (r.width < 24 || r.height < 24 || !img.naturalWidth) continue;
+        const dpr = window.devicePixelRatio || 1;
+        const ratio = img.naturalWidth / (r.width * dpr);
+        const kind = ratio > 2 ? 'bad' : ratio < 0.95 / dpr ? 'warn' : 'ok';
+        const x = r.left + scrollX;
+        const y = r.top + scrollY;
+        const outline = document.createElement('div');
+        outline.className = `o ${kind}`;
+        outline.style.cssText = `left:${x}px;top:${y}px;width:${r.width}px;height:${r.height}px`;
+        const badge = document.createElement('div');
+        badge.className = `b ${kind}`;
+        badge.style.cssText = `left:${x}px;top:${y}px`;
+        const shown = `${Math.round(r.width)}×${Math.round(r.height)}`;
+        badge.textContent = `${img.naturalWidth}×${img.naturalHeight}${shown !== `${img.naturalWidth}×${img.naturalHeight}` ? ` → ${shown}` : ''}${kind === 'bad' ? ` · ${ratio.toFixed(1)}× too big` : kind === 'warn' ? ' · upscaled' : ''}`;
+        frag.append(outline, badge);
+        n++;
+      }
+      layer.replaceChildren(frag);
+      return n;
+    }
+  }
+
+  globalThis.__imageScraper = { scan, autoScroll, highlight, fetchAsDataUrl, watch, pick, count, links, inspect };
 })();

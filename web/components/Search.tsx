@@ -7,7 +7,7 @@ import type { SearchEntry } from '@/lib/search';
 import { ArrowIcon, SearchIcon } from './Icons';
 
 export const OPEN_SEARCH = 'open-search';
-const GROUPS: SearchEntry['group'][] = ['Guides', 'Help Center', 'On this site'];
+const GROUPS: SearchEntry['group'][] = ['Features', 'Guides', 'Help Center', 'On this site'];
 const SUGGESTED = ['download all images', 'ZIP file names', 'alt text', 'WebP', 'not found', 'permissions'];
 
 // Lower case without accents, so "resume" finds "résumé".

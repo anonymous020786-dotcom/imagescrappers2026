@@ -49,8 +49,9 @@ cpSync(EXT, EXT_GRANTED, { recursive: true });
 
 const BIG = Buffer.alloc(400 * 1024, 7);
 
-// A real PNG drawn by `pixel(x, y)` -> [r, g, b].
+// A real PNG drawn by `pixel(x, y)` -> [r, g, b] (or [r, g, b, a] for an image with transparency).
 function makePng(width, height, pixel) {
+  const ch = pixel(0, 0).length;
   const chunk = (type, body) => {
     const head = Buffer.alloc(8);
     head.writeUInt32BE(body.length);
@@ -59,14 +60,14 @@ function makePng(width, height, pixel) {
     tail.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), body])));
     return Buffer.concat([head, body, tail]);
   };
-  const raw = Buffer.alloc((width * 3 + 1) * height);
+  const raw = Buffer.alloc((width * ch + 1) * height);
   for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) Buffer.from(pixel(x, y)).copy(raw, y * (width * 3 + 1) + 1 + x * 3);
+    for (let x = 0; x < width; x++) Buffer.from(pixel(x, y)).copy(raw, y * (width * ch + 1) + 1 + x * ch);
   }
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
-  ihdr.set([8, 2, 0, 0, 0], 8);
+  ihdr.set([8, ch === 4 ? 6 : 2, 0, 0, 0], 8);
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
@@ -109,7 +110,31 @@ const MEDIA = {
   '/media/open.png': ['image/png', makePng(128, 128, (x, y) => ramp(0, 1, 0)(x * 3 + y))],
   '/media/article.png': ['image/png', makePng(128, 128, (x, y) => ramp(1, 1, 0)(x + y * 3))],
   '/media/anim.gif': ['image/gif', makeGif([1, 2])],
+  // Left half opaque green, right half fully transparent.
+  '/media/clear.png': ['image/png', makePng(300, 300, (x) => [40, 160, 90, x < 150 ? 255 : 0])],
+  '/media/drawing.svg': ['image/svg+xml', Buffer.from(`<?xml version="1.0"?>
+<!-- Created with Inkscape -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="120" height="120" inkscape:version="1.2">
+  <metadata>editor data</metadata>
+  <rect width="120" height="120" fill="#5b4ae6" inkscape:label="background" />
+  <text x="10" y="60">Hi  there</text>
+</svg>`)],
 };
+
+// Entries of a ZIP written with the STORE method (what the extension's ZipWriter produces).
+function readStoredZip(buf) {
+  const files = new Map();
+  for (let p = 0; p + 30 <= buf.length && buf.readUInt32LE(p) === 0x04034b50; ) {
+    const size = buf.readUInt32LE(p + 18);
+    const nameLen = buf.readUInt16LE(p + 26);
+    const extraLen = buf.readUInt16LE(p + 28);
+    const name = buf.subarray(p + 30, p + 30 + nameLen).toString('utf8');
+    const start = p + 30 + nameLen + extraLen;
+    files.set(name, buf.subarray(start, start + size));
+    p = start + size;
+  }
+  return files;
+}
 let base = '';
 const server = http.createServer((req, res) => {
   const path = req.url.split('?')[0];
@@ -802,6 +827,272 @@ try {
     await toasted(/not a collections backup/);
     await dash2.click('#closeCollections');
   });
+
+  // ------------------------------------------------------------- tools added in 1.7
+  const toolsPage = await context.newPage();
+  await toolsPage.goto(`${base}/tools.html`);
+  await toolsPage.waitForLoadState('load');
+  const toolsTab = await worker.evaluate(async (url) => (await chrome.tabs.query({ url }))[0].id, `${base}/tools.html`);
+  const dash3 = await context.newPage();
+  await dash3.goto(`chrome-extension://${extId}/dashboard/dashboard.html?tabId=${toolsTab}`);
+  await dash3.waitForFunction(() => document.querySelectorAll('#gallery .card').length >= 5, null, { timeout: 15000 });
+  await dash3.click('#resetFilters');
+  const toolCards = () => dash3.$$eval('#gallery .card .url', (els) => els.map((e) => e.textContent.split('/').pop()).sort());
+  const toolsToast = (re) => dash3.waitForFunction((src) => new RegExp(src).test(document.querySelector('.toast')?.textContent ?? ''), re.source, { timeout: 20000 });
+  const openTool = async (name) => {
+    await dash3.dblclick(`#gallery .card:has(.url:text-matches("${name}\$"))`);
+    await dash3.waitForSelector('#lightbox:not(.hidden)');
+  };
+  const closeTool = () => dash3.evaluate(() => document.getElementById('lbClose').click());
+
+  await check('Analyze finds animated, transparent and broken images (Properties filter)', async () => {
+    await dash3.click('#analyze');
+    await toolsToast(/broken image/);
+    const show = async (prop) => {
+      await dash3.selectOption('#fProps', prop);
+      await dash3.waitForTimeout(150);
+      return toolCards();
+    };
+    try {
+      assert.deepEqual(await show('animated'), ['anim.gif']);
+      assert.deepEqual(await show('transparent'), ['clear.png']);
+      assert.ok((await show('opaque')).includes('red.png'));
+      assert.ok(!(await show('still')).includes('anim.gif'));
+      assert.deepEqual(await show('broken'), ['missing.png']);
+    } finally {
+      await dash3.selectOption('#fProps', 'any'); // filters are remembered: never leave one set for later tests
+    }
+  });
+
+  await check('broken images export as CSV with the reason', async () => {
+    const since = now();
+    await dash3.click('#exportBtn');
+    await dash3.click('#exportMenu [data-export="broken"]');
+    const file = await latestDownload('text/csv', since);
+    assert.ok(!file.missing, JSON.stringify(file.missing));
+    const lines = readFileSync(file.filename, 'utf8').trim().split('\n');
+    assert.equal(lines[0], 'url,page,error');
+    assert.equal(lines.length, 2);
+    assert.match(lines[1], /\/media\/missing\.png,.*tools\.html,HTTP 404/);
+  });
+
+  await check('photo metadata exports one CSV row per image', async () => {
+    const since = now();
+    await dash3.click('#exportBtn');
+    await dash3.click('#exportMenu [data-export="metadata"]');
+    await toolsToast(/Saved metadata/);
+    const file = await latestDownload('text/csv', since);
+    assert.ok(!file.missing, JSON.stringify(file.missing));
+    const lines = readFileSync(file.filename, 'utf8').trim().split('\n');
+    assert.match(lines[0], /^url,page,width,height,camera_make,camera_model,lens,taken/);
+    assert.equal(lines.length, 1 + (await toolCards()).length);
+  });
+
+  await check('weight report shows types, domains and the heaviest images', async () => {
+    await dash3.click('#weightBtn');
+    await dash3.waitForSelector('#weightDialog[open]');
+    assert.match(await dash3.textContent('#weightSummary'), /in \d+ images/);
+    assert.ok((await dash3.$$('#weightTypes .bar-row')).length >= 2);
+    assert.ok((await dash3.$$('#weightHeaviest .audit-item')).length >= 3);
+    assert.match(await dash3.textContent('#weightTypes'), /PNG/);
+    await dash3.click('#weightClose');
+  });
+
+  await check('sort by colour and by aspect ratio', async () => {
+    await dash3.selectOption('#sortKey', 'ratio');
+    await dash3.selectOption('#sortDir', 'desc');
+    await dash3.waitForTimeout(150);
+    const first = (await dash3.$$eval('#gallery .card .url', (els) => els.map((e) => e.textContent.split('/').pop())))[0];
+    assert.equal(first, 'red.png'); // 4:3 is the widest image here
+    await dash3.selectOption('#sortKey', 'color');
+    await dash3.waitForTimeout(150);
+    const order = await dash3.$$eval('#gallery .card .url', (els) => els.map((e) => e.textContent.split('/').pop()));
+    assert.ok(order.indexOf('red.png') > order.indexOf('clear.png'), `descending hue: ${order}`); // green hue (≈145°) above red (0°)
+    await dash3.selectOption('#sortKey', 'order');
+    await dash3.selectOption('#sortDir', 'asc');
+  });
+
+  await check('Compare: two selected images, slider and measured difference', async () => {
+    await dash3.click('#selNone');
+    assert.equal(await dash3.isVisible('#compareBtn'), false);
+    await dash3.click('#gallery .card:has(.url:text-matches("/red.png$"))');
+    await dash3.click('#gallery .card:has(.url:text-matches("/clear.png$"))');
+    assert.equal(await dash3.isVisible('#compareBtn'), true);
+    await dash3.click('#compareBtn');
+    await dash3.waitForSelector('#compareDialog[open]');
+    try {
+      await dash3.waitForFunction(() => /pixels differ/.test(document.getElementById('compareInfo').textContent), null, { timeout: 15000 });
+      assert.match(await dash3.textContent('#compareInfo'), /(400×300 vs 300×300|300×300 vs 400×300) · .* Different: \d+\.\d% of pixels differ/);
+      await dash3.fill('#compareSlider', '20');
+      assert.equal(await dash3.$eval('#compareTop', (e) => e.style.clipPath), 'inset(0px 80% 0px 0px)');
+    } finally {
+      await dash3.click('#compareClose');
+      await dash3.click('#selNone');
+    }
+  });
+
+  await check('favicon pack: ICO with 16/32/48, PNG icons, manifest and tags', async () => {
+    await openTool('red.png');
+    try {
+      const since = now();
+      await dash3.click('#lbFavicon');
+      const zip = await latestDownload('application/zip', since);
+      assert.ok(!zip.missing, JSON.stringify(zip.missing));
+      const files = readStoredZip(readFileSync(zip.filename));
+      for (const name of ['favicon.ico', 'favicon-16x16.png', 'favicon-32x32.png', 'apple-touch-icon.png', 'android-chrome-512x512.png', 'site.webmanifest', 'favicon-tags.html']) {
+        assert.ok(files.has(name), `${name} missing from ${[...files.keys()]}`);
+      }
+      const ico = files.get('favicon.ico');
+      assert.deepEqual([ico.readUInt16LE(0), ico.readUInt16LE(2), ico.readUInt16LE(4)], [0, 1, 3]);
+      assert.deepEqual([ico[6], ico[22], ico[38]], [16, 32, 48]);
+      const firstPng = ico.subarray(ico.readUInt32LE(6 + 12));
+      assert.equal(firstPng.readUInt32BE(16), 16); // the embedded image really is 16 px wide
+      assert.equal(files.get('apple-touch-icon.png').readUInt32BE(16), 180);
+      assert.equal(JSON.parse(files.get('site.webmanifest').toString()).icons[1].sizes, '512x512');
+    } finally {
+      await closeTool();
+    }
+  });
+
+  await check('responsive set: WebP and fallback per width plus a <picture> snippet', async () => {
+    await openTool('clear.png');
+    try {
+      const since = now();
+      await dash3.click('#lbResponsive');
+      const zip = await latestDownload('application/zip', since);
+      assert.ok(!zip.missing, JSON.stringify(zip.missing));
+      const files = readStoredZip(readFileSync(zip.filename));
+      // 300 px wide original: one 300 px... no, widths never upscale: only the original width is used.
+      assert.deepEqual([...files.keys()].sort(), ['clear-300.png', 'clear-300.webp', 'picture.html']);
+      assert.equal(files.get('clear-300.webp').subarray(8, 12).toString(), 'WEBP');
+      assert.equal(files.get('clear-300.png').readUInt32BE(16), 300);
+      const html = files.get('picture.html').toString();
+      assert.match(html, /<source type="image\/webp" srcset="clear-300\.webp 300w"/);
+      assert.match(html, /src="clear-300\.png".*/); // transparent: PNG fallback, not JPEG
+      assert.match(html, /alt="Transparent"/);
+    } finally {
+      await closeTool();
+    }
+    await openTool('red.png');
+    try {
+      const since = now();
+      await dash3.click('#lbResponsive');
+      const zip = await latestDownload('application/zip', since);
+      const files = readStoredZip(readFileSync(zip.filename));
+      assert.deepEqual([...files.keys()].sort(), ['picture.html', 'red-320.jpg', 'red-320.webp']); // 400 px original → 320 px
+      assert.equal(files.get('red-320.jpg')[0], 0xff); // JPEG for an opaque photo
+    } finally {
+      await closeTool();
+    }
+  });
+
+  await check('copy as data URI and as a CSS background', async () => {
+    await dash3.evaluate(() => {
+      navigator.clipboard.writeText = async (t) => {
+        window.copied = t;
+      };
+    });
+    await openTool('red.png');
+    try {
+      await dash3.click('#lbDataUri');
+      await dash3.waitForFunction(() => window.copied);
+      assert.match(await dash3.evaluate(() => window.copied.slice(0, 30)), /^data:image\/png;base64,iVBOR/);
+      await dash3.evaluate(() => { window.copied = ''; });
+      await dash3.click('#lbDataUri', { modifiers: ['Shift'] });
+      await dash3.waitForFunction(() => window.copied);
+      assert.match(await dash3.evaluate(() => window.copied.slice(0, 40)), /^background-image: url\("data:image\/png/);
+      assert.equal(await dash3.isVisible('#lbEyedropper'), true); // Chromium has the EyeDropper API
+    } finally {
+      await closeTool();
+    }
+  });
+
+  await check('editor adjustments: grayscale and brightness are applied at full resolution', async () => {
+    const r = await dash3.evaluate(async () => {
+      const { renderEdited, decode } = await import('/lib/imaging.js');
+      const c = new OffscreenCanvas(10, 10);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#c81e1e';
+      ctx.fillRect(0, 0, 10, 10);
+      const src = await c.convertToBlob({ type: 'image/png' });
+      const pixel = async (filter) => {
+        const out = await renderEdited(src, { filter }, 'image/png');
+        const d = await decode(out);
+        const k = new OffscreenCanvas(d.width, d.height).getContext('2d');
+        k.drawImage(d.el, 0, 0);
+        return [...k.getImageData(5, 5, 1, 1).data.slice(0, 3)];
+      };
+      return { gray: await pixel('grayscale(100%)'), dark: await pixel('brightness(50%)') };
+    });
+    assert.ok(Math.abs(r.gray[0] - r.gray[1]) <= 2 && Math.abs(r.gray[1] - r.gray[2]) <= 2, `not grey: ${r.gray}`);
+    assert.ok(r.dark[0] < 120 && r.dark[0] > 80, `not darker: ${r.dark}`);
+    await openTool('red.png');
+    try {
+      await dash3.click('#lbEdit');
+      await dash3.waitForSelector('#editDialog[open]');
+      await dash3.click('#edAdjust summary');
+      await dash3.fill('#edAdjust [data-adjust="grayscale"]', '100');
+      await dash3.fill('#edAdjust [data-adjust="brightness"]', '120');
+      const state = await dash3.evaluate(async () => (await import('/dashboard/editor.js')).editorState());
+      assert.equal(state.filter, 'brightness(120%) grayscale(100%)');
+      await dash3.click('#edReset');
+      assert.equal((await dash3.evaluate(async () => (await import('/dashboard/editor.js')).editorState())).filter, '');
+      await dash3.keyboard.press('Escape');
+      await dash3.waitForFunction(() => !document.getElementById('editDialog').open);
+    } finally {
+      await closeTool();
+    }
+  });
+
+  await check('SVG optimizer: downloads are cleaned when the option is on', async () => {
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.sync.get('settings');
+      await chrome.storage.sync.set({ settings: { ...settings, optimizeSvg: true } });
+    });
+    await dash3.waitForTimeout(300);
+    await dash3.click('#selNone');
+    await dash3.click('#gallery .card:has(.url:text-matches("/drawing.svg$"))');
+    const since = now();
+    await dash3.click('#download');
+    const file = await latestDownload('image/svg+xml', since);
+    assert.ok(!file.missing, JSON.stringify(file.missing));
+    const svg = readFileSync(file.filename, 'utf8');
+    assert.doesNotMatch(svg, /inkscape|<!--|metadata/);
+    assert.match(svg, /<rect width="120" height="120" fill="#5b4ae6"\/>/);
+    assert.match(svg, /<text x="10" y="60">Hi {2}there<\/text>/);
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.sync.get('settings');
+      await chrome.storage.sync.set({ settings: { ...settings, optimizeSvg: false } });
+    });
+    await dash3.waitForTimeout(300);
+    await dash3.click('#selNone');
+  });
+
+  await check('Inspect page: size badges on the page, oversized image in red', async () => {
+    await dash3.click('#inspectBtn');
+    await toolsToast(/Showing sizes on \d+ images/);
+    const badges = await toolsPage.evaluate(() => {
+      const host = document.querySelector('image-scraper-inspector');
+      return [...host.shadowRoot.querySelectorAll('.b')].map((b) => `${b.className}|${b.textContent}`);
+    });
+    assert.ok(badges.some((b) => /^b bad\|400×300 → 100×75 · 4\.0× too big$/.test(b)), JSON.stringify(badges));
+    assert.ok(badges.some((b) => /^b ok\|300×300$/.test(b)), JSON.stringify(badges));
+    await dash3.click('#inspectBtn');
+    await toolsToast(/removed/);
+    assert.equal(await toolsPage.evaluate(() => document.querySelector('image-scraper-inspector')), null);
+  });
+
+  await check('keyboard shortcuts panel opens with "?"', async () => {
+    await dash3.click('#gallery');
+    await dash3.keyboard.press('Shift+Slash');
+    await dash3.waitForSelector('#shortcutsDialog[open]');
+    assert.equal((await dash3.$$('#shortcutsList section')).length, 3);
+    assert.match(await dash3.textContent('#shortcutsList'), /Quick download with your default filters/);
+    await dash3.keyboard.press('Escape');
+    await dash3.waitForFunction(() => !document.getElementById('shortcutsDialog').open);
+  });
+  await toolsPage.close();
+  await dash3.close();
 
   await check('options page shows the download log and sources.csv switch', async () => {
     const opts = await context.newPage();

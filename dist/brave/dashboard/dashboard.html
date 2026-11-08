@@ -27,7 +27,9 @@
       <button id="importBtn" title="Paste or load a list of image or page URLs">⤓ Import URLs</button>
       <button id="collectionsBtn" title="Images you saved to collections">★ Collections</button>
       <button id="historyBtn" title="Previous scrapes">🕘 History</button>
+      <button id="inspectBtn" title="Show each image's real and displayed size on the page; oversized images are marked in red">⌗ Inspect page</button>
       <button id="themeBtn" title="Switch theme">◐</button>
+      <button id="shortcutsBtn" title="Keyboard shortcuts (?)">⌨</button>
       <a class="button" href="https://image-scraper-pro.netlify.app/guides/?utm_source=extension&amp;utm_medium=dashboard" target="_blank" rel="noopener" title="Help, guides and how-tos (opens the website)">? Help</a>
       <button id="optionsBtn" title="Settings">⚙</button>
     </div>
@@ -67,6 +69,18 @@
           <option value="landscape">Landscape</option>
           <option value="portrait">Portrait</option>
           <option value="square">Square</option>
+        </select>
+      </section>
+
+      <section>
+        <h3>Properties <span class="muted small">after Analyze</span></h3>
+        <select id="fProps" title="Properties found by Analyze">
+          <option value="any">Any</option>
+          <option value="transparent">Has transparency</option>
+          <option value="opaque">No transparency</option>
+          <option value="animated">Animated (GIF, APNG, WebP)</option>
+          <option value="still">Not animated</option>
+          <option value="broken">Broken (failed to load)</option>
         </select>
       </section>
 
@@ -127,6 +141,8 @@
             <option value="name">File name</option>
             <option value="type">Type</option>
             <option value="domain">Domain</option>
+            <option value="color">Colour (after Analyze)</option>
+            <option value="ratio">Aspect ratio</option>
           </select>
           <select id="sortDir">
             <option value="asc">Ascending</option>
@@ -158,6 +174,8 @@
         <button id="keepBest" class="hidden" title="In each group of duplicates, select the largest copy and deselect the others">Keep best</button>
         <button id="similarClear" class="hidden" title="Back to all images">Similar images ✕</button>
         <button id="auditBtn" title="Accessibility, performance and SEO check of this page's images (alt text, file names, social images, oversized files, lazy loading…)">Audit</button>
+        <button id="weightBtn" title="Total image weight by type and domain, and the heaviest images (after Analyze)">Weight</button>
+        <button id="compareBtn" class="hidden" title="Compare the two selected images with a slider and a measured difference">Compare</button>
         <div class="seg">
           <button id="viewGrid" title="Grid view">▦</button>
           <button id="viewList" title="List view">☰</button>
@@ -206,6 +224,8 @@
         <button data-export="sitemap" title="Google image sitemap of the pages these images were found on">Image sitemap (.xml)</button>
         <button data-export="pdf">PDF document (.pdf)…</button>
         <button data-export="sheet">Contact sheet (.png)</button>
+        <button data-export="metadata" title="Camera, lens, date, exposure, GPS and credit of each photo">Photo metadata (.csv)</button>
+        <button data-export="broken" title="Images that failed to load during Analyze, with the reason">Broken images (.csv)</button>
         <hr>
         <button data-copy="markdown">Copy as Markdown</button>
         <button data-copy="html">Copy as HTML</button>
@@ -245,6 +265,10 @@
         <button id="lbSave" title="Save this image to a collection">★ Save</button>
         <button id="lbSimilar" title="Show the images that look most like this one">Find similar</button>
         <button id="lbFrames" class="hidden" title="Save single frames of this GIF as PNG files">GIF frames…</button>
+        <button id="lbFavicon" title="Create favicon.ico, PNG app icons, site.webmanifest and the HTML tags from this image (ZIP)">Favicon pack</button>
+        <button id="lbResponsive" title="Create WebP and JPEG/PNG versions at several widths plus a ready &lt;picture&gt; snippet (ZIP)">Responsive set</button>
+        <button id="lbDataUri" title="Copy this image as a base64 data URI (Shift+click: as a CSS background-image)">Copy data URI</button>
+        <button id="lbEyedropper" class="hidden" title="Pick any colour on the screen and copy its HEX code">Pick colour</button>
       </div>
       <section id="lbPalette" class="lb-exif hidden" aria-live="polite"></section>
       <section id="lbExif" class="lb-exif hidden" aria-live="polite"></section>
@@ -515,6 +539,17 @@
       </label>
       <label>Quality <input id="edQuality" type="range" min="0.5" max="1" step="0.01"></label>
     </div>
+    <details id="edAdjust" class="edit-adjust">
+      <summary>Adjustments</summary>
+      <div class="adjust-grid">
+        <label>Brightness <input data-adjust="brightness" type="range" min="0" max="200" value="100"></label>
+        <label>Contrast <input data-adjust="contrast" type="range" min="0" max="200" value="100"></label>
+        <label>Saturation <input data-adjust="saturate" type="range" min="0" max="200" value="100"></label>
+        <label>Grayscale <input data-adjust="grayscale" type="range" min="0" max="100" value="0"></label>
+        <label>Sepia <input data-adjust="sepia" type="range" min="0" max="100" value="0"></label>
+        <label>Blur <input data-adjust="blur" type="range" min="0" max="20" value="0"></label>
+      </div>
+    </details>
     <div id="edStage" class="edit-stage checker">
       <canvas id="edCanvas"></canvas>
       <div id="edCrop" class="edit-crop hidden"></div>
@@ -525,6 +560,47 @@
       <button id="edCopy">Copy</button>
       <button id="edDownload" class="primary">Download</button>
     </div>
+  </dialog>
+
+  <dialog id="compareDialog" class="import-dialog compare-dialog">
+    <div class="dialog-head">
+      <h3>Compare images</h3>
+      <button id="compareClose" title="Close (Esc)">✕</button>
+    </div>
+    <p id="compareInfo" class="muted small"></p>
+    <div id="compareStage" class="compare-stage checker">
+      <img id="compareA" alt="First image">
+      <div id="compareTop" class="compare-top"><img id="compareB" alt="Second image"></div>
+      <div id="compareHandle" class="compare-handle" aria-hidden="true"></div>
+    </div>
+    <input id="compareSlider" type="range" min="0" max="100" value="50" aria-label="Reveal the second image">
+    <div class="import-row end">
+      <span class="muted small spacer">Drag the slider to reveal the second image. The difference is measured on both images scaled to the same size.</span>
+      <button id="compareSwap">Swap</button>
+    </div>
+  </dialog>
+
+  <dialog id="weightDialog" class="import-dialog audit-dialog">
+    <div class="dialog-head">
+      <h3>Image weight report</h3>
+      <button id="weightClose" title="Close (Esc)">✕</button>
+    </div>
+    <p id="weightSummary" class="muted small"></p>
+    <div class="weight-grid">
+      <section><h4>By type</h4><div id="weightTypes" class="bars"></div></section>
+      <section><h4>By domain</h4><div id="weightDomains" class="bars"></div></section>
+    </div>
+    <h4>Heaviest images</h4>
+    <div id="weightHeaviest" class="audit-list"></div>
+  </dialog>
+
+  <dialog id="shortcutsDialog" class="import-dialog shortcuts-dialog">
+    <div class="dialog-head">
+      <h3>Keyboard shortcuts</h3>
+      <button id="shortcutsClose" title="Close (Esc)">✕</button>
+    </div>
+    <div id="shortcutsList" class="shortcuts-list"></div>
+    <p class="muted small">Browser-wide shortcuts (Alt+Shift+I, O and D) can be changed in your browser's extension shortcut settings.</p>
   </dialog>
 
   <script type="module" src="dashboard.js"></script>
