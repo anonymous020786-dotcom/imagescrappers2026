@@ -22,7 +22,8 @@ let pages = 0;
 for (const file of walk(OUT).filter((f) => f.endsWith('.html'))) {
   pages++;
   const html = readFileSync(file, 'utf8');
-  for (const m of html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)) {
+  // End tags may carry whitespace or junk before ">" (`</script >`), which browsers still accept.
+  for (const m of html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script\b[^>]*>/gi)) {
     const attrs = m[1] ?? '';
     if (/\ssrc\s*=/i.test(attrs) || !m[2]) continue;
     const type = (/\stype\s*=\s*"([^"]*)"/i.exec(attrs) ?? [])[1] ?? '';

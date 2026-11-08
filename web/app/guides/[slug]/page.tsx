@@ -4,6 +4,7 @@ import { Breadcrumb, CtaBox, GuideGrid, Prose, Toc } from '@/components/Content'
 import { JsonLd } from '@/components/JsonLd';
 import { getGuide, getGuides, humanDate } from '@/lib/content';
 import { markdownToHtml } from '@/lib/markdown';
+import { pageMetadata } from '@/lib/metadata';
 import { publisher, siteUrl } from '@/lib/site';
 
 type Props = { params: Promise<{ slug: string }> };
@@ -16,14 +17,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const guide = getGuide((await params).slug);
   if (!guide) return {};
-  const path = `/guides/${guide.slug}/`;
-  return {
-    title: guide.title,
-    description: guide.description,
-    alternates: { canonical: path },
-    openGraph: { type: 'article', url: path, title: guide.title, description: guide.description, modifiedTime: guide.updated },
-    twitter: { title: guide.title, description: guide.description },
-  };
+  return pageMetadata({ title: guide.title, description: guide.description, path: `/guides/${guide.slug}/`, type: 'article', modifiedTime: guide.updated });
 }
 
 export default async function GuidePage({ params }: Props) {

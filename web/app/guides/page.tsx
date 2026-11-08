@@ -2,19 +2,14 @@ import type { Metadata } from 'next';
 import { Breadcrumb, GuideGrid } from '@/components/Content';
 import { JsonLd } from '@/components/JsonLd';
 import { getGuides } from '@/lib/content';
+import { pageMetadata } from '@/lib/metadata';
 import { REPO, siteUrl } from '@/lib/site';
 
 const TITLE = 'Guides: download, convert and audit images';
 const DESCRIPTION =
   'Step-by-step guides for downloading every image from a page or a whole website, converting to WebP, removing photo metadata and improving image SEO.';
 
-export const metadata: Metadata = {
-  title: TITLE,
-  description: DESCRIPTION,
-  alternates: { canonical: '/guides/' },
-  openGraph: { type: 'website', url: '/guides/', title: TITLE, description: DESCRIPTION },
-  twitter: { title: TITLE, description: DESCRIPTION },
-};
+export const metadata: Metadata = pageMetadata({ title: TITLE, description: DESCRIPTION, path: '/guides/' });
 
 export default function GuidesPage() {
   const guides = getGuides();

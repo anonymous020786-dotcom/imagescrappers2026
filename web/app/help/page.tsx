@@ -3,16 +3,11 @@ import { Breadcrumb, CtaBox, GuideGrid, Prose, Toc } from '@/components/Content'
 import { JsonLd } from '@/components/JsonLd';
 import { faqFrom, getGuides, getHelp } from '@/lib/content';
 import { markdownToHtml } from '@/lib/markdown';
+import { pageMetadata } from '@/lib/metadata';
 
 const help = getHelp();
 
-export const metadata: Metadata = {
-  title: help.title,
-  description: help.description,
-  alternates: { canonical: '/help/' },
-  openGraph: { type: 'website', url: '/help/', title: help.title, description: help.description },
-  twitter: { title: help.title, description: help.description },
-};
+export const metadata: Metadata = pageMetadata({ title: help.title, description: help.description, path: '/help/' });
 
 export default function HelpPage() {
   const html = markdownToHtml(help.body);

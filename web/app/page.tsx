@@ -9,6 +9,7 @@ import { JsonLd } from '@/components/JsonLd';
 import { UseCaseTabs, type UseCase } from '@/components/UseCaseTabs';
 import { getGuides } from '@/lib/content';
 import { markdownToHtml, plainText } from '@/lib/markdown';
+import { pageMetadata } from '@/lib/metadata';
 import { REPO, chromeButton, ctaFor, hrefFor, installUrl, sameAs, siteUrl, version, type Browser } from '@/lib/site';
 
 const TITLE = 'Image Scraper Pro – Free Bulk Image Downloader Extension';
@@ -17,20 +18,20 @@ const DESCRIPTION =
 const SHARE_TITLE = 'Image Scraper Pro – Find and download every image on any page';
 
 export const metadata: Metadata = {
-  title: { absolute: TITLE },
-  description: DESCRIPTION,
+  ...pageMetadata({
+    title: TITLE,
+    absoluteTitle: true,
+    description: DESCRIPTION,
+    path: '/',
+    shareTitle: SHARE_TITLE,
+    shareDescription:
+      'Free, open-source image downloader and image SEO audit for every major browser. Bulk download, ZIP, crawl whole sites. No account, no tracking in the extension.',
+    twitterDescription: 'Free, open-source image downloader and image SEO audit for Chrome, Edge, Firefox, Brave, Opera, Vivaldi and Safari.',
+  }),
   keywords: [
     'image downloader', 'image scraper', 'bulk image download', 'download all images', 'image extractor', 'chrome extension',
     'firefox add-on', 'image SEO', 'alt text checker', 'image sitemap',
   ],
-  alternates: { canonical: '/' },
-  openGraph: {
-    type: 'website',
-    url: '/',
-    title: SHARE_TITLE,
-    description: 'Free, open-source image downloader and image SEO audit for every major browser. Bulk download, ZIP, crawl whole sites. No account, no tracking in the extension.',
-  },
-  twitter: { title: SHARE_TITLE, description: 'Free, open-source image downloader and image SEO audit for Chrome, Edge, Firefox, Brave, Opera, Vivaldi and Safari.' },
 };
 
 const BROWSERS: { id: Browser; name: string; color: string; note: string }[] = [
