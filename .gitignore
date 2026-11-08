@@ -5,3 +5,11 @@ site-dist/
 
 # Local Netlify folder
 .netlify
+web/node_modules/
+web/.next/
+web/out/
+web/*.tsbuildinfo
+# copied from store/chrome and src/icons by web/scripts/prepare-assets.mjs
+web/public/assets/screenshot-*.png
+web/public/assets/icon*.png
+web/next-env.d.ts

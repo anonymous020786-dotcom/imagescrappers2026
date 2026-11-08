@@ -31,6 +31,34 @@ jobs:
       - name: Unit tests
         run: npm test
 
+  website:
+    name: Website (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Type check
+        run: npx --no-install next typegen && npm run typecheck
+      - name: Static export and security headers
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+      - name: Every page exported
+        run: |
+          for p in index guides/index help/index privacy/index 404 sitemap.xml robots.txt _headers; do
+            f="out/$p"; [ -f "$f" ] || f="out/$p.html"
+            [ -f "$f" ] || { echo "::error::missing out/$p"; exit 1; }
+          done
+          echo "$(find out -name index.html | wc -l) pages, $(grep -c '<url>' out/sitemap.xml) sitemap URLs"
+
   build:
     name: Build all browsers
     runs-on: ubuntu-latest

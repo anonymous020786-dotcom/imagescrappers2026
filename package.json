@@ -18,7 +18,8 @@
     "test:e2e": "node scripts/build.mjs chrome && node tests/e2e/extension.e2e.mjs",
     "store:assets": "node scripts/store-assets.mjs",
     "version:bump": "node scripts/bump-version.mjs",
-    "site": "node scripts/build-site.mjs",
+    "site": "npm --prefix web run build",
+    "site:dev": "npm --prefix web run dev",
     "site:og": "node scripts/site-og.mjs"
   },
   "engines": {
