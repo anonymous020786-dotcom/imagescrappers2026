@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
-import { Breadcrumb, GuideGrid } from '@/components/Content';
+import Link from 'next/link';
+import { Breadcrumb } from '@/components/Content';
+import { GuideBrowser } from '@/components/GuideBrowser';
 import { JsonLd } from '@/components/JsonLd';
 import { getGuides } from '@/lib/content';
 import { pageMetadata } from '@/lib/metadata';
@@ -31,9 +33,9 @@ export default function GuidesPage() {
         <p className="lead">Practical, step-by-step guides for Image Scraper Pro, from saving every image on a page to auditing a whole site&apos;s image SEO.</p>
       </section>
       <section className="wrap guides-list" aria-label="All guides">
-        <GuideGrid guides={guides} />
+        <GuideBrowser guides={guides.map((g) => ({ slug: g.slug, title: g.title, description: g.description, tag: g.tag ?? 'Guide', minutes: g.minutes }))} />
         <p className="center muted guides-help">
-          Can&apos;t find what you need? Visit the <a href="/help/">Help Center</a> or <a href={`${REPO}/issues`}>ask a question on GitHub</a>.
+          Can&apos;t find what you need? Visit the <Link href="/help/">Help Center</Link> or <a href={`${REPO}/issues`}>ask a question on GitHub</a>.
         </p>
       </section>
     </>

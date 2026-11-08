@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { AlsoOn, HeroInstallButton, VisitorBrowserMarker } from '@/components/BrowserAware';
 import { GuideGrid } from '@/components/Content';
 import {
   BracesIcon, ChartIcon, CheckIcon, ChevronIcon, DownloadIcon, EditIcon, FileIcon, FilterIcon, GlobeIcon, InfoIcon, LockIcon,
   SearchIcon, ShareIcon, TextIcon,
 } from '@/components/Icons';
 import { JsonLd } from '@/components/JsonLd';
+import { CountUp } from '@/components/Polish';
 import { UseCaseTabs, type UseCase } from '@/components/UseCaseTabs';
 import { getGuides } from '@/lib/content';
 import { markdownToHtml, plainText } from '@/lib/markdown';
@@ -229,25 +231,15 @@ export default function HomePage() {
               audit and bulk-download them in one click.
             </p>
             <div className="cta-row">
-              <a className="btn btn-primary" href={hrefFor('chrome')} data-dl="chrome">
-                <DownloadIcon />
-                {chromeButton} <small>· free</small>
-              </a>
+              <HeroInstallButton
+                fallback="chrome"
+                options={BROWSERS.map((b) => ({ id: b.id, name: shortName(b), href: hrefFor(b.id), cta: ctaFor(b.id) }))}
+              />
               <a className="btn" href="#download">
                 All browsers
               </a>
             </div>
-            <p className="also-on">
-              Also on{' '}
-              <a href={hrefFor('firefox')} data-dl="firefox">
-                Firefox
-              </a>{' '}
-              ·{' '}
-              <a href={hrefFor('edge')} data-dl="edge">
-                Microsoft Edge
-              </a>{' '}
-              · <a href="#download">more browsers</a>
-            </p>
+            <AlsoOn options={BROWSERS.map((b) => ({ id: b.id, name: shortName(b), href: hrefFor(b.id), cta: ctaFor(b.id) }))} />
             <ul className="trust" aria-label="Highlights">
               {['Free & open source', 'No account', 'Runs 100% locally'].map((t) => (
                 <li key={t}>
@@ -329,7 +321,7 @@ export default function HomePage() {
             ['0', 'trackers in the extension'],
           ].map(([n, label]) => (
             <li key={label}>
-              <strong className="grad-text">{n}</strong>
+              <CountUp value={n} />
               <span>{label}</span>
             </li>
           ))}
@@ -651,6 +643,7 @@ export default function HomePage() {
               <em>View on GitHub →</em>
             </a>
           </div>
+          <VisitorBrowserMarker />
           <div className="install-note">
             <InfoIcon />
             <p>

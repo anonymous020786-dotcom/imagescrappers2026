@@ -105,3 +105,26 @@ export function Toc({ html }: { html: string }) {
 export function Prose({ html }: { html: string }) {
   return <div className="prose" dangerouslySetInnerHTML={{ __html: html }} />;
 }
+
+// Previous and next guide, at the end of each guide.
+export function PrevNext({ prev, next }: { prev?: Page; next?: Page }) {
+  if (!prev && !next) return null;
+  return (
+    <nav className="prev-next" aria-label="More guides">
+      {prev ? (
+        <Link className="pn prev" href={`/guides/${prev.slug}/`}>
+          <span>← Previous</span>
+          <strong>{prev.title}</strong>
+        </Link>
+      ) : (
+        <span />
+      )}
+      {next && (
+        <Link className="pn next" href={`/guides/${next.slug}/`}>
+          <span>Next →</span>
+          <strong>{next.title}</strong>
+        </Link>
+      )}
+    </nav>
+  );
+}

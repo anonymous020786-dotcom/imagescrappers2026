@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { Breadcrumb, Prose } from '@/components/Content';
+import { ProseTools, TocSidebar } from '@/components/DocTools';
 import { getPrivacyMarkdown } from '@/lib/content';
-import { markdownToHtml } from '@/lib/markdown';
+import { headings, markdownToHtml } from '@/lib/markdown';
 import { pageMetadata } from '@/lib/metadata';
 
 const DESCRIPTION =
@@ -11,10 +12,17 @@ export const metadata: Metadata = pageMetadata({ title: 'Privacy Policy', descri
 
 // Rendered from PRIVACY.md in the repository root, the same file the store listings link to.
 export default function PrivacyPage() {
+  const html = markdownToHtml(getPrivacyMarkdown());
   return (
-    <article className="article wrap-narrow">
-      <Breadcrumb crumbs={[{ name: 'Privacy Policy', path: '/privacy/' }]} />
-      <Prose html={markdownToHtml(getPrivacyMarkdown())} />
-    </article>
+    <div className="doc-layout wrap">
+      <article className="article">
+        <Breadcrumb crumbs={[{ name: 'Privacy Policy', path: '/privacy/' }]} />
+        <Prose html={html} />
+        <ProseTools />
+      </article>
+      <aside className="doc-aside">
+        <TocSidebar items={headings(html)} />
+      </aside>
+    </div>
   );
 }

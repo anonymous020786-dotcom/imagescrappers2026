@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { GithubIcon, MenuIcon } from './Icons';
+import { SearchButton } from './Search';
 import { ThemeToggle } from './Theme';
 
 const REPO = 'https://github.com/anonymous020786-dotcom/imagescrappers2026';
@@ -43,17 +44,22 @@ export function Header() {
         <ul className="nav-links" id="nav-links">
           {LINKS.map((l) => (
             <li key={l.href}>
-              <Link href={l.href} onClick={() => setOpen(false)}>
+              <Link
+                href={l.href}
+                onClick={() => setOpen(false)}
+                aria-current={!l.href.includes('#') && pathname?.startsWith(l.href) ? 'page' : undefined}
+              >
                 {l.label}
               </Link>
             </li>
           ))}
         </ul>
         <div className="nav-cta">
+          <SearchButton />
           <ThemeToggle />
-          <a className="btn btn-sm gh" href={REPO} rel="noopener">
+          <a className="btn btn-sm gh" href={REPO} rel="noopener" aria-label="Image Scraper Pro on GitHub" title="Source code on GitHub">
             <GithubIcon />
-            GitHub
+            <span className="gh-label">GitHub</span>
           </a>
           <Link className="btn btn-sm btn-primary" href="/#download">
             Get it free

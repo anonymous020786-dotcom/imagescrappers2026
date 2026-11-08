@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Breadcrumb, CtaBox, GuideGrid, Prose, Toc } from '@/components/Content';
+import { Breadcrumb, CtaBox, GuideGrid, PrevNext, Prose, Toc } from '@/components/Content';
+import { ProseTools, ReadingProgress, TocSidebar } from '@/components/DocTools';
 import { JsonLd } from '@/components/JsonLd';
 import { getGuide, getGuides, humanDate } from '@/lib/content';
-import { markdownToHtml } from '@/lib/markdown';
+import { headings, markdownToHtml } from '@/lib/markdown';
 import { pageMetadata } from '@/lib/metadata';
 import { publisher, siteUrl } from '@/lib/site';
 
@@ -47,7 +48,9 @@ export default async function GuidePage({ params }: Props) {
           about: { '@id': `${siteUrl}/#app` },
         }}
       />
-      <article className="article wrap-narrow">
+      <ReadingProgress />
+      <div className="doc-layout wrap">
+      <article className="article">
         <Breadcrumb crumbs={[{ name: 'Guides', path: '/guides/' }, { name: guide.title, path }]} />
         <header className="article-head">
           <span className="eyebrow">{guide.tag ?? 'Guide'}</span>
@@ -60,8 +63,14 @@ export default async function GuidePage({ params }: Props) {
         </header>
         <Toc html={html} />
         <Prose html={html} />
+        <ProseTools />
         <CtaBox />
+        <PrevNext prev={guides[index - 1]} next={guides[index + 1]} />
       </article>
+      <aside className="doc-aside">
+        <TocSidebar items={headings(html)} />
+      </aside>
+      </div>
       <section className="related wrap" aria-labelledby="related-title">
         <h2 id="related-title">More guides</h2>
         <GuideGrid guides={related} />

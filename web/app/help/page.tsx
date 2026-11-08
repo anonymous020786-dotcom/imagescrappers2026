@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { Breadcrumb, CtaBox, GuideGrid, Prose, Toc } from '@/components/Content';
+import { ProseTools, ReadingProgress, TocSidebar } from '@/components/DocTools';
 import { JsonLd } from '@/components/JsonLd';
 import { faqFrom, getGuides, getHelp } from '@/lib/content';
-import { markdownToHtml } from '@/lib/markdown';
+import { headings, markdownToHtml } from '@/lib/markdown';
 import { pageMetadata } from '@/lib/metadata';
 
 const help = getHelp();
@@ -15,7 +16,9 @@ export default function HelpPage() {
     <>
       {/* Every "### question" in content/help.md is also FAQ structured data. */}
       <JsonLd data={{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faqFrom(help.body) }} />
-      <article className="article wrap-narrow">
+      <ReadingProgress />
+      <div className="doc-layout wrap">
+      <article className="article">
         <Breadcrumb crumbs={[{ name: 'Help Center', path: '/help/' }]} />
         <header className="article-head">
           <span className="eyebrow">Help Center</span>
@@ -24,8 +27,13 @@ export default function HelpPage() {
         </header>
         <Toc html={html} />
         <Prose html={html} />
+        <ProseTools />
         <CtaBox />
       </article>
+      <aside className="doc-aside">
+        <TocSidebar items={headings(html)} />
+      </aside>
+      </div>
       <section className="related wrap" aria-labelledby="related-title">
         <h2 id="related-title">Popular guides</h2>
         <GuideGrid guides={getGuides().slice(0, 3)} />

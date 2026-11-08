@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import { Enhancements } from '@/components/Enhancements';
 import { Footer } from '@/components/Footer';
 import { Header } from '@/components/Header';
+import { BackToTop } from '@/components/Polish';
+import { SearchPalette } from '@/components/Search';
+import { getSearchIndex } from '@/lib/search';
 import { SITE_NAME, siteUrl, verification } from '@/lib/site';
 import './globals.css';
 
@@ -62,6 +65,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Header />
         <main id="main">{children}</main>
         <Footer />
+        <SearchPalette index={getSearchIndex()} />
+        <BackToTop />
         <Enhancements />
       </body>
     </html>
