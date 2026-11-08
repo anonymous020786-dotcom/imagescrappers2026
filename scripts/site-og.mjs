@@ -1,4 +1,4 @@
-// Renders the landing page's social sharing image, site/assets/og-image.png (1200×630), with Playwright.
+// Renders the website's social sharing image, web/public/assets/og-image.png (1200×630), with Playwright.
 // Run with `npm run site:og` after changing the branding or screenshots.
 import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -47,8 +47,8 @@ const html = `<!doctype html><html><head><style>
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1200, height: 630 } });
 await page.setContent(html, { waitUntil: 'load' });
-const out = join(ROOT, 'site', 'assets', 'og-image.png');
+const out = join(ROOT, 'web', 'public', 'assets', 'og-image.png');
 mkdirSync(dirname(out), { recursive: true });
 await page.screenshot({ path: out });
 await browser.close();
-console.log('✔ site/assets/og-image.png');
+console.log('✔ web/public/assets/og-image.png');

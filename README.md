@@ -219,7 +219,30 @@ src/
 scripts/build.mjs         per-browser builds and store zips (no dependencies)
 scripts/make-icons.mjs    renders the PNG icons
 tests/                    unit tests (node:test) and a Playwright end-to-end test
+web/                      the website (Next.js): see "Website" below
 ```
+
+## Website
+
+The website at [image-scraper-pro.netlify.app](https://image-scraper-pro.netlify.app/) is a Next.js app in `web/`
+(App Router, TypeScript), exported as static files and deployed by Netlify (`netlify.toml`). It has its own
+dependencies; the extension itself stays dependency-free.
+
+```bash
+cd web
+npm install
+npm run dev      # http://localhost:3000
+npm run build    # static export to web/out, plus web/out/_headers
+```
+
+- **Pages:** `app/` (home, `/guides/`, `/guides/<slug>/`, `/help/`, `/privacy/`, `sitemap.xml`, `robots.txt`).
+- **Content:** guides and the Help Center are Markdown in `web/content/` (one `.md` file per guide, with front
+  matter). The privacy page is rendered from `PRIVACY.md`. Screenshots and icons are copied from `store/chrome/` and
+  `src/icons/` at build time.
+- **Netlify environment variables:** `CHROME_STORE_URL`, `FIREFOX_STORE_URL`, `EDGE_STORE_URL` (store buttons),
+  `GOOGLE_SITE_VERIFICATION`, `BING_SITE_VERIFICATION`, and optionally `SITE_URL`.
+- **Security:** `web/scripts/security-headers.mjs` writes a Content-Security-Policy that allows only the inline scripts
+  Next.js generated, by hash.
 
 ## Continuous integration and delivery
 
