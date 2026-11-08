@@ -48,7 +48,7 @@ npm run build:chrome   # or a single target: chrome | edge | brave | opera | viv
 
 Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 
-## Features (110+)
+## Features (135+)
 
 ### Detection: finding every image
 1. `<img>` elements, including their natural (intrinsic) dimensions
@@ -184,6 +184,23 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 111. **Structured data images**: checks that the page's JSON-LD or microdata includes an image for rich results. A shared `og:image` found by a crawl counts for every page that declares it
 112. **Google image sitemap**: export an image sitemap (`.xml`) of the scanned or crawled pages and their images, ready to submit in Search Console (split every 50,000 pages, up to 1,000 images per page)
 
+### Developer and designer tools
+113. **Broken image checker**: Analyze marks every image that fails to load, with the reason (`HTTP 404 Not Found`, network error). Filter by *Broken* and export the list as `broken-images.csv` with each URL, page and error
+114. **Transparency detection**: after Analyze, filter by images with an alpha channel (*Transparent*) or without one (*Opaque*). Useful for finding logos and cut-outs
+115. **Animation detection**: finds animated GIFs, APNGs and animated WebP files by reading the file itself, not the extension. Filter by *Animated* or *Still*
+116. **Sort by colour and by shape**: order the gallery by main hue (greys last) to build mood boards, or by aspect ratio from tall to wide
+117. **Favicon pack**: turn any image into `favicon.ico` (16, 32 and 48 px in one file), PNG icons from 16 to 512 px, an Apple touch icon, a `site.webmanifest` and the HTML tags to paste into your page, all in one ZIP
+118. **Responsive image set**: export an image as WebP plus a JPEG or PNG fallback at 320, 640, 960, 1280 and 1920 px wide (never enlarged), with a ready-to-paste `<picture>` element using `srcset` and `sizes`
+119. **SVG optimizer**: an optional setting that strips editor metadata (Inkscape, Sodipodi, Sketch, Serif), comments and whitespace from downloaded SVG files, keeping text, styles and scripts untouched. Every result is checked to still be a valid SVG
+120. **Copy as data URI**: copy an image as a `data:` URI to inline it in HTML or CSS, or with Shift as a ready `background-image: url(…)` rule
+121. **Image compare**: select two images and compare them side by side with a slider, with their sizes, file weights and the measured share of pixels that differ. Shows whether two files are really the same picture
+122. **Editor adjustments**: brightness, contrast, saturation, greyscale, sepia and blur sliders in the image editor, applied at full resolution together with cropping, rotating and resizing
+123. **Metadata CSV export**: after Analyze, export every image's camera, lens, date, GPS position, creator and copyright to one spreadsheet (`image-metadata.csv`)
+124. **Inspect page**: shows each image's real size and its displayed size as badges on the page itself. Images more than twice the size they are shown at are marked red, upscaled images amber, so you can see what slows a page down
+125. **Page weight report**: total image weight of the page, broken down by file type and by domain, plus the heaviest images, with bar charts
+126. **Keyboard shortcuts panel**: press `?` in the dashboard to see every shortcut, grouped by dashboard, preview and browser
+127. **Colour picker**: pick the exact colour of any pixel in a preview and copy its HEX code (browsers with the `EyeDropper` API; the button is hidden elsewhere)
+
 ### Browser integration
 - Right-click menus: download an image with your naming rules, download a linked image, copy an image URL, reverse search, download all images on the page, scrape all tabs
 - Keyboard commands: `Alt+Shift+I` popup, `Alt+Shift+O` dashboard, `Alt+Shift+D` quick download (all can be changed)
@@ -192,7 +209,7 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 - **Scrape history** of the last *N* scrapes, which you can reopen at any time
 - Settings sync across devices (`storage.sync`), plus JSON import/export and reset
 - Light, dark and system themes
-- Keyboard shortcuts in the dashboard: `/` search · `Ctrl+A` select all · `Ctrl+C` copy URLs · `D` download · `Z` ZIP · `R` rescan · `Del` remove · `Esc` clear
+- Keyboard shortcuts in the dashboard (press `?` for the full list): `/` search · `Ctrl+A` select all · `Ctrl+C` copy URLs · `D` download · `Z` ZIP · `R` rescan · `Del` remove · `Esc` clear
 - Store listing localized in English, Spanish, German and French
 
 ## Roadmap

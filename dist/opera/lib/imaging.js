@@ -8,6 +8,7 @@ import { extractPalette } from './palette.js';
 import { fitToBytes, planGeometry, watermarkPosition } from './prepare.js';
 import { mergeRights } from './rights.js';
 import { fitInCell } from './sheet.js';
+import { hasTransparency, isAnimated } from './props.js';
 
 const blobCache = new Map();
 const MAX_CACHE_BYTES = 400 * 1024 * 1024;
@@ -25,10 +26,12 @@ function remember(url, blob) {
 export async function fetchBlob(img, signal) {
   if (blobCache.has(img.url)) return blobCache.get(img.url);
   let blob = null;
+  let reason = 'network error';
   if (!img.url.startsWith('blob:')) {
     try {
       const res = await fetch(img.url, { credentials: 'include', signal });
       if (res.ok) blob = await res.blob();
+      else reason = `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`;
     } catch (err) {
       if (err.name === 'AbortError') throw err;
     }
@@ -38,7 +41,7 @@ export async function fetchBlob(img, signal) {
     const hit = results.find((r) => r?.dataUrl);
     if (hit) blob = await (await fetch(hit.dataUrl)).blob();
   }
-  if (!blob) throw new Error('Could not fetch image');
+  if (!blob) throw new Error(`Could not fetch image (${reason})`);
   remember(img.url, blob);
   return blob;
 }
@@ -108,20 +111,61 @@ function dominantColor(el) {
   return `#${hex(best.r)}${hex(best.g)}${hex(best.b)}`;
 }
 
-// Fills in exact bytes, MIME type, natural dimensions, perceptual hash and colour.
+// Whether any sampled pixel is see-through (a 64×64 sample keeps this fast for large images).
+function transparent(el) {
+  const c = canvas(64, 64);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(el, 0, 0, 64, 64);
+  return hasTransparency(ctx.getImageData(0, 0, 64, 64).data);
+}
+
+// RGBA pixels of an image scaled to width×height, for comparing two images.
+export async function pixelsOf(blob, width, height) {
+  const decoded = await decode(blob);
+  try {
+    const c = canvas(width, height);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(decoded.el, 0, 0, width, height);
+    return { data: ctx.getImageData(0, 0, width, height).data, natural: { width: decoded.width, height: decoded.height } };
+  } finally {
+    URL.revokeObjectURL(decoded.url);
+  }
+}
+
+// A square PNG of `size` px with the image centred and fitted (transparent margins), for icon packs.
+export async function squarePng(blob, size) {
+  const decoded = await decode(blob);
+  try {
+    const c = canvas(size, size);
+    const ctx = c.getContext('2d');
+    const scale = Math.min(size / decoded.width, size / decoded.height);
+    const w = Math.round(decoded.width * scale);
+    const h = Math.round(decoded.height * scale);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(decoded.el, Math.floor((size - w) / 2), Math.floor((size - h) / 2), w, h);
+    return await encode(c, 'image/png');
+  } finally {
+    URL.revokeObjectURL(decoded.url);
+  }
+}
+
+// Fills in exact bytes, MIME type, natural dimensions, perceptual hash, colour, animation and transparency.
 export async function analyze(img, signal) {
   const blob = await fetchBlob(img, signal);
   const info = { bytes: blob.size, mime: blob.type };
   const type = typeFromMime(blob.type);
   if (type) info.type = type;
-  const rights = mergeRights(img.rights, readRights(await blob.arrayBuffer()));
+  const bytes = await blob.arrayBuffer();
+  const rights = mergeRights(img.rights, readRights(bytes));
   if (rights) info.rights = rights;
+  info.animated = isAnimated(bytes);
   try {
     const decoded = await decode(blob);
     info.width = decoded.width;
     info.height = decoded.height;
     info.hash = dHash(decoded.el);
     info.color = dominantColor(decoded.el);
+    info.transparent = transparent(decoded.el);
     URL.revokeObjectURL(decoded.url);
   } catch {
     // Undecodable (e.g. TIFF in Chrome): keep byte info only.
@@ -260,7 +304,8 @@ export async function removeMetadata(blob, quality = 0.92) {
 
 // Applies editor settings: rotation (0/90/180/270), flips, crop (fractions of the rotated image),
 // optional max width, then encodes as `mime`. Never upscales.
-export async function renderEdited(blob, { rotation = 0, flipH = false, flipV = false, crop, maxWidth = 0 }, mime, quality = 0.92) {
+// `filter` is a CSS filter string from the editor's adjustments (brightness, contrast, saturation…), or ''.
+export async function renderEdited(blob, { rotation = 0, flipH = false, flipV = false, crop, maxWidth = 0, filter = '' }, mime, quality = 0.92) {
   const decoded = await decode(blob);
   try {
     const { width, height } = decoded;
@@ -277,6 +322,7 @@ export async function renderEdited(blob, { rotation = 0, flipH = false, flipV = 
       ctx.fillRect(0, 0, g.output.width, g.output.height);
     }
     ctx.imageSmoothingQuality = 'high';
+    if (filter && 'filter' in ctx) ctx.filter = filter;
     const s = g.source;
     ctx.drawImage(full, s.x, s.y, s.width, s.height, 0, 0, g.output.width, g.output.height);
     return await encode(out, mime, quality);

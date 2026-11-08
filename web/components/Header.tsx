@@ -10,7 +10,7 @@ import { ThemeToggle } from './Theme';
 
 const REPO = 'https://github.com/anonymous020786-dotcom/imagescrappers2026';
 const LINKS = [
-  { href: '/#features', label: 'Features' },
+  { href: '/features/', label: 'Features' },
   { href: '/#use-cases', label: 'Use cases' },
   { href: '/#seo', label: 'SEO audit' },
   { href: '/guides/', label: 'Guides' },

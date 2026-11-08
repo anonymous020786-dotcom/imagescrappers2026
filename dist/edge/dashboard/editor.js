@@ -1,4 +1,4 @@
-// Per-image editor: rotate, flip, crop and resize, then download or copy. Runs entirely on the device.
+// Per-image editor: rotate, flip, crop, resize and adjust colours, then download or copy. Runs entirely on the device.
 import { decode, renderEdited } from '../lib/imaging.js';
 import { FULL_CROP, cropFromDrag, flipCrop, orientTransform, orientedSize, outputGeometry, rotateCrop } from '../lib/editgeom.js';
 
@@ -11,6 +11,25 @@ let ed = null; // { blob, decoded, rotation, flipH, flipV, crop, opts }
 function initialFormat(blob) {
   const hit = Object.entries(MIME).find(([, m]) => m === blob.type);
   return hit ? hit[0] : 'png';
+}
+
+// Colour adjustments as a canvas filter. `scale` shrinks the blur radius for the smaller preview.
+const ADJUST_DEFAULTS = { brightness: 100, contrast: 100, saturate: 100, grayscale: 0, sepia: 0, blur: 0 };
+const canFilter = 'filter' in document.createElement('canvas').getContext('2d');
+
+function adjustFilter(scale = 1) {
+  const parts = [];
+  for (const input of document.querySelectorAll('#edAdjust [data-adjust]')) {
+    const key = input.dataset.adjust;
+    const v = Number(input.value);
+    if (v === ADJUST_DEFAULTS[key]) continue;
+    parts.push(key === 'blur' ? `blur(${(v * scale).toFixed(2)}px)` : `${key}(${v}%)`);
+  }
+  return parts.join(' ');
+}
+
+function resetAdjustments() {
+  for (const input of document.querySelectorAll('#edAdjust [data-adjust]')) input.value = String(ADJUST_DEFAULTS[input.dataset.adjust]);
 }
 
 function geometry() {
@@ -26,6 +45,7 @@ function draw() {
   c.width = Math.max(1, Math.round(o.width * k));
   c.height = Math.max(1, Math.round(o.height * k));
   const ctx = c.getContext('2d');
+  if (canFilter) ctx.filter = adjustFilter(k) || 'none';
   ctx.setTransform(k, 0, 0, k, 0, 0);
   ctx.transform(...orientTransform(width, height, ed.rotation, ed.flipH, ed.flipV));
   ctx.drawImage(el, 0, 0, width, height);
@@ -107,6 +127,7 @@ function flip(horizontal) {
 function reset() {
   Object.assign(ed, { rotation: 0, flipH: false, flipV: false, crop: { ...FULL_CROP } });
   $('edWidth').value = '';
+  resetAdjustments();
   draw();
 }
 
@@ -114,6 +135,7 @@ async function output() {
   const format = $('edFormat').value;
   const blob = await renderEdited(ed.blob, {
     rotation: ed.rotation, flipH: ed.flipH, flipV: ed.flipV, crop: ed.crop, maxWidth: Number($('edWidth').value) || 0,
+    filter: canFilter ? adjustFilter() : '',
   }, MIME[format], Number($('edQuality').value));
   return { blob, ext: format === 'jpeg' ? 'jpg' : format };
 }
@@ -134,6 +156,8 @@ $('edCropClear').onclick = () => {
 };
 $('edReset').onclick = reset;
 $('edWidth').oninput = showCrop;
+$('edAdjust').hidden = !canFilter; // e.g. older Safari: no canvas filters
+$('edAdjust').addEventListener('input', () => ed && draw());
 $('edClose').onclick = close;
 $('editDialog').addEventListener('close', close);
 $('edDownload').onclick = async () => {
@@ -162,11 +186,12 @@ export async function openEditor(blob, opts) {
   $('edFormat').value = initialFormat(blob);
   $('edQuality').value = String(opts.quality ?? 0.92);
   $('edWidth').value = '';
+  resetAdjustments();
   $('editDialog').showModal();
   draw();
 }
 
 // Read-only view of the editor state for tests.
 export function editorState() {
-  return ed && { rotation: ed.rotation, flipH: ed.flipH, flipV: ed.flipV, crop: { ...ed.crop }, output: geometry().output };
+  return ed && { rotation: ed.rotation, flipH: ed.flipH, flipV: ed.flipV, crop: { ...ed.crop }, output: geometry().output, filter: canFilter ? adjustFilter() : null };
 }

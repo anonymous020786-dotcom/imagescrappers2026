@@ -2,8 +2,14 @@ import { api, isScriptableUrl } from '../lib/browser.js';
 import { applyTheme, loadSettings, saveSettings } from '../lib/settings.js';
 import { callInTab, scanTab, scanTabs } from '../lib/scanner.js';
 import {
-  analyze, convert, copyImageToClipboard, fetchBlob, paletteOf, pdfImage, prepareImage, removeMetadata, renderContactSheet, resizeActive,
+  analyze, convert, copyImageToClipboard, fetchBlob, paletteOf, pdfImage, pixelsOf, prepareImage, removeMetadata, renderContactSheet, resizeActive,
+  squarePng,
 } from '../lib/imaging.js';
+import { ICO_SIZES, PNG_ICONS, buildIco, faviconHtml, webManifest } from '../lib/favicon.js';
+import { hasTransparency, pixelDifference } from '../lib/props.js';
+import { brokenToCSV, metadataToCSV, weightReport } from '../lib/reports.js';
+import { responsiveSnippet, responsiveWidths } from '../lib/responsive.js';
+import { optimizeSvg } from '../lib/svg.js';
 import { SIZE_PRESETS, planActive, planFromSettings } from '../lib/prepare.js';
 import { RIGHTS_LABELS, mergeRights, rightsClass, sourcesToCSV } from '../lib/rights.js';
 import { findProfile, loadProfiles, profileFilters, removeProfile, saveProfiles, setProfile, withProfile } from '../lib/profiles.js';
@@ -196,6 +202,7 @@ function readFilters() {
     keepUnknownSize: $('fKeepUnknown').checked,
     hideTracking: $('fHideTracking').checked,
     aspect: $('fAspect').value,
+    props: $('fProps').value,
     minBytes: num('fMinKB') * 1024,
     maxBytes: num('fMaxKB') * 1024,
     types: [...state.types],
@@ -220,6 +227,7 @@ function writeFilters(f) {
   $('fKeepUnknown').checked = f.keepUnknownSize ?? true;
   $('fHideTracking').checked = f.hideTracking ?? true;
   $('fAspect').value = f.aspect || 'any';
+  $('fProps').value = f.props || 'any';
   $('fMinKB').value = f.minBytes ? Math.round(f.minBytes / 1024) : '';
   $('fMaxKB').value = f.maxBytes ? Math.round(f.maxBytes / 1024) : '';
   state.types = new Set(f.types ?? []);
@@ -447,6 +455,7 @@ function updateStats() {
     ? `${sel.length.toLocaleString()} selected${known.length ? ` · ${formatBytes(bytes)}${known.length < sel.length ? '+' : ''}` : ''}`
     : 'Nothing selected: click images to select, Shift+click for a range';
   for (const id of ['download', 'downloadZip', 'copyUrls', 'removeSel', 'saveBtn']) $(id).disabled = !sel.length;
+  $('compareBtn').classList.toggle('hidden', sel.length !== 2);
 }
 
 function refreshCard(index) {
@@ -816,8 +825,11 @@ async function analyzeImages(list, label) {
   await mapLimit(todo, 6, async (img) => {
     try {
       Object.assign(img, await analyze(img, signal));
+      delete img.broken;
     } catch (err) {
       if (err.name === 'AbortError') throw err;
+      // Broken image checker: keep why it failed ("HTTP 404", "network error") for the filter and CSV.
+      img.broken = /\((.+)\)$/.exec(err.message)?.[1] ?? err.message;
       failed++;
     }
     progress(++done, todo.length, label);
@@ -830,7 +842,7 @@ $('analyze').onclick = async () => {
   if (!(await needAllSites())) return;
   const failed = await analyzeImages(state.view, 'Analyzing');
   render();
-  toast(failed ? `Analyzed. ${failed} images could not be fetched.` : 'Analysis complete: exact sizes, types and colours added');
+  toast(failed ? `Analyzed. ${failed} broken image${failed === 1 ? '' : 's'}: choose "Broken" under Properties to see them.` : 'Analysis complete: exact sizes, types, colours, transparency and animation added');
 };
 
 $('dupes').onclick = async () => {
@@ -888,13 +900,23 @@ async function processBlob(blob, convertTo) {
 
 // True when downloads must go through fetch: re-encoding, or removing metadata.
 function needsFetch(convertTo) {
-  return needsProcessing(convertTo) || Boolean(settings.stripMetadata);
+  return needsProcessing(convertTo) || Boolean(settings.stripMetadata) || Boolean(settings.optimizeSvg);
 }
 
 // Optional final step for every saved file: drop EXIF/GPS, XMP and comments (on the device).
 async function finishBlob(blob) {
+  if (settings.optimizeSvg && blob.type.includes('svg')) blob = await cleanSvg(blob);
   if (!settings.stripMetadata) return blob;
   return (await removeMetadata(blob, settings.jpegQuality)).blob;
+}
+
+// SVG optimizer: uses the cleaned file only when it is smaller and still parses as SVG.
+async function cleanSvg(blob) {
+  const { svg, saved } = optimizeSvg(await blob.text());
+  if (!saved) return blob;
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') return blob;
+  return new Blob([svg], { type: 'image/svg+xml' });
 }
 
 // Fetches (with retries) and optionally converts/resizes one image.
@@ -1078,6 +1100,8 @@ $('exportMenu').onclick = async (e) => {
   }
   if (fmt === 'pdf') return openPdfDialog(list);
   if (fmt === 'sitemap') return saveImageSitemap(list);
+  if (fmt === 'metadata') return exportMetadata(list);
+  if (fmt === 'broken') return exportBroken(list);
   if (fmt === 'sheet') {
     if (!(await needAllSites())) return;
     return createContactSheet(list);
@@ -2164,7 +2188,7 @@ $('themeBtn').onclick = async () => {
 
 const rerender = debounce(render, 150);
 for (const id of ['fText', 'fMinW', 'fMinH', 'fMaxW', 'fMaxH', 'fMinKB', 'fMaxKB']) $(id).addEventListener('input', rerender);
-for (const id of ['fRegex', 'fKeepUnknown', 'fHideTracking', 'fAspect', 'fRights', 'fDomain', 'fHideDupes', 'fSelectedOnly', 'sortKey', 'sortDir']) {
+for (const id of ['fRegex', 'fKeepUnknown', 'fHideTracking', 'fAspect', 'fProps', 'fRights', 'fDomain', 'fHideDupes', 'fSelectedOnly', 'sortKey', 'sortDir']) {
   $(id).addEventListener('change', render);
 }
 document.querySelectorAll('[data-preset]').forEach((b) => {
@@ -2192,6 +2216,291 @@ api.storage.onChanged.addListener(async (changes) => {
   }
 });
 
+// ------------------------------------------------------------- tools (1.7)
+
+const exportBase = (suffix, list = state.view) =>
+  applyTemplate(`{pagedomain}_{date}_${suffix}`, { url: '', pageUrl: state.tab?.url ?? list[0]?.pageUrl });
+const imageBase = (img) => baseNameFromUrl(img.url).replace(/\.[a-z0-9]{2,5}$/i, '') || 'image';
+
+// Photo metadata: camera, lens, date, exposure, GPS and credit of every image, as a spreadsheet.
+async function exportMetadata(list) {
+  if (!(await needAllSites())) return;
+  await ensureReferer();
+  const label = 'Reading metadata';
+  const signal = startTask(label);
+  const rows = [];
+  let done = 0;
+  await mapLimit(list, 6, async (img) => {
+    let exif = null;
+    try {
+      exif = readMetadata(await (await fetchBlob(img, signal)).arrayBuffer())?.exif ?? null;
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+    }
+    rows.push({ img, exif });
+    progress(++done, list.length, label);
+  }, signal);
+  endTask();
+  rows.sort((a, b) => list.indexOf(a.img) - list.indexOf(b.img));
+  saveBlob(new Blob([metadataToCSV(rows)], { type: 'text/csv' }), `${exportBase('photo-metadata', list)}.csv`);
+  const withExif = rows.filter((r) => r.exif).length;
+  toast(`Saved metadata for ${rows.length.toLocaleString()} images (${withExif.toLocaleString()} with camera or GPS data)`);
+}
+
+// Broken image checker: images that failed to load during Analyze, with the reason.
+function exportBroken(list) {
+  const broken = list.filter((i) => i.broken);
+  if (!broken.length) {
+    return toast(list.some((i) => i.bytes != null) ? 'No broken images found' : 'Click Analyze first: it checks every image and records the ones that fail');
+  }
+  saveBlob(new Blob([brokenToCSV(broken)], { type: 'text/csv' }), `${exportBase('broken-images', list)}.csv`);
+  toast(`Saved ${broken.length.toLocaleString()} broken image${broken.length === 1 ? '' : 's'}`);
+}
+
+// Image weight report: bytes by type and domain, and the heaviest images.
+function bars(container, groups, total) {
+  container.replaceChildren();
+  for (const g of groups.slice(0, 8)) {
+    const row = el('div', 'bar-row');
+    const bar = el('span', 'bar');
+    bar.style.setProperty('--share', `${Math.max(2, (g.bytes / total) * 100)}%`);
+    row.append(el('span', 'bar-label', g.key), bar, el('span', 'bar-value', `${formatBytes(g.bytes)} · ${g.count}`));
+    container.append(row);
+  }
+  if (groups.length > 8) container.append(el('p', 'muted small', `…and ${groups.length - 8} more`));
+}
+
+$('weightBtn').onclick = () => {
+  const report = weightReport(state.view);
+  if (!report.count) return toast('Click Analyze first: the report needs the exact file sizes');
+  $('weightSummary').textContent =
+    `${formatBytes(report.total)} in ${report.count.toLocaleString()} images` +
+    (report.unknown ? ` (${report.unknown.toLocaleString()} not analyzed yet)` : '') +
+    ` · average ${formatBytes(report.total / report.count)}`;
+  bars($('weightTypes'), report.byType, report.total);
+  bars($('weightDomains'), report.byDomain, report.total);
+  const list = $('weightHeaviest');
+  list.replaceChildren();
+  for (const img of report.heaviest) {
+    const row = el('div', 'audit-item');
+    const thumb = el('img', 'checker');
+    thumb.src = safeImageSrc(img.url) ?? '';
+    thumb.alt = '';
+    thumb.loading = 'lazy';
+    const body = el('div', 'body');
+    body.append(el('span', 'url', img.url.length > 200 ? `${img.url.slice(0, 200)}…` : img.url));
+    body.append(el('span', 'muted', `${formatBytes(img.bytes)} · ${(img.type || '').toUpperCase()}${img.width ? ` · ${img.width}×${img.height}` : ''} · ${Math.round((img.bytes / report.total) * 100)}% of the total`));
+    row.append(thumb, body);
+    row.title = 'Open in the preview';
+    row.onclick = () => {
+      const index = state.view.indexOf(img);
+      if (index < 0) return;
+      $('weightDialog').close();
+      openLightbox(index);
+    };
+    list.append(row);
+  }
+  $('weightDialog').showModal();
+};
+$('weightClose').onclick = () => $('weightDialog').close();
+
+// Compare two images: a reveal slider and the measured pixel difference.
+const compare = { urls: [], swap: false };
+
+function closeCompare() {
+  compare.urls.forEach((u) => URL.revokeObjectURL(u));
+  compare.urls = [];
+  if ($('compareDialog').open) $('compareDialog').close();
+}
+
+async function openCompare(a, b) {
+  if (!(await needAllSites())) return;
+  await ensureReferer();
+  let blobs;
+  try {
+    blobs = await Promise.all([fetchBlob(a), fetchBlob(b)]);
+  } catch (err) {
+    return toast(`Could not load both images: ${err.message}`);
+  }
+  closeCompare();
+  compare.urls = blobs.map((blob) => URL.createObjectURL(blob));
+  $('compareA').src = compare.urls[0];
+  $('compareB').src = compare.urls[1];
+  $('compareSlider').value = '50';
+  $('compareSlider').dispatchEvent(new Event('input'));
+  $('compareInfo').textContent = 'Measuring the difference…';
+  $('compareDialog').showModal();
+  try {
+    const first = await pixelsOf(blobs[0], 256, 256);
+    const w = 256;
+    const h = Math.max(1, Math.round((first.natural.height / first.natural.width) * 256));
+    const [pa, pb] = await Promise.all([pixelsOf(blobs[0], w, h), pixelsOf(blobs[1], w, h)]);
+    const d = pixelDifference(pa.data, pb.data);
+    const ratioA = pa.natural.width / pa.natural.height;
+    const ratioB = pb.natural.width / pb.natural.height;
+    const shape = Math.abs(ratioA - ratioB) / ratioA > 0.02 ? ' The shapes differ, so the second image was stretched to compare.' : '';
+    const verdict = d.changed === 0 ? 'Visually identical' : d.changed < 0.01 ? 'Almost identical' : d.changed < 0.2 ? 'Similar' : 'Different';
+    $('compareInfo').textContent =
+      `${pa.natural.width}×${pa.natural.height} vs ${pb.natural.width}×${pb.natural.height} · ${formatBytes(blobs[0].size)} vs ${formatBytes(blobs[1].size)} · ` +
+      `${verdict}: ${(d.changed * 100).toFixed(1)}% of pixels differ (mean difference ${(d.mean * 100).toFixed(1)}%).${shape}`;
+  } catch (err) {
+    $('compareInfo').textContent = `Shown side by side; the difference could not be measured (${err.message}).`;
+  }
+}
+
+$('compareBtn').onclick = () => {
+  const sel = selected();
+  if (sel.length === 2) openCompare(sel[0], sel[1]);
+};
+$('compareSlider').addEventListener('input', () => {
+  const v = Number($('compareSlider').value);
+  $('compareTop').style.clipPath = `inset(0 ${100 - v}% 0 0)`;
+  $('compareHandle').style.left = `${v}%`;
+});
+$('compareSwap').onclick = () => {
+  const [a, b] = [$('compareA').src, $('compareB').src];
+  $('compareA').src = b;
+  $('compareB').src = a;
+};
+$('compareClose').onclick = closeCompare;
+$('compareDialog').addEventListener('close', closeCompare);
+
+// Keyboard shortcuts panel.
+const SHORTCUTS = [
+  ['Dashboard', [['/', 'Search the images'], ['Ctrl+A', 'Select all visible'], ['Ctrl+C', 'Copy the selected URLs'], ['D', 'Download the selection'], ['Z', 'Download the selection as ZIP'], ['R', 'Rescan the page'], ['Del', 'Remove the selection from the results'], ['Esc', 'Clear the selection'], ['?', 'Show this list']]],
+  ['Preview', [['← →', 'Previous / next image'], ['Space', 'Select or deselect'], ['+ −', 'Zoom in / out'], ['S', 'Save to a collection'], ['Esc', 'Close the preview']]],
+  ['Browser', [['Alt+Shift+I', 'Open the popup'], ['Alt+Shift+O', 'Open the dashboard for this tab'], ['Alt+Shift+D', 'Quick download with your default filters']]],
+];
+function openShortcuts() {
+  const list = $('shortcutsList');
+  if (!list.childElementCount) {
+    for (const [group, keys] of SHORTCUTS) {
+      const section = el('section');
+      section.append(el('h4', '', group));
+      const dl = el('dl');
+      for (const [key, what] of keys) {
+        const dt = el('dt');
+        for (const k of key.split(/(?<=\S)\+(?=\S)| /)) dt.append(el('kbd', '', k));
+        dl.append(dt, el('dd', '', what));
+      }
+      section.append(dl);
+      list.append(section);
+    }
+  }
+  $('shortcutsDialog').showModal();
+}
+$('shortcutsBtn').onclick = openShortcuts;
+$('shortcutsClose').onclick = () => $('shortcutsDialog').close();
+
+// On-page size inspector: badges with real and displayed size on the scanned tab.
+state.inspecting = false;
+$('inspectBtn').onclick = async () => {
+  if (state.tab?.id == null) return toast('Open the dashboard from a page to inspect it');
+  const on = !state.inspecting;
+  try {
+    const counts = await callInTab(state.tab.id, 'inspect', [on], true);
+    state.inspecting = on;
+    $('inspectBtn').classList.toggle('active', on);
+    const n = counts.reduce((sum, c) => sum + (Number(c) || 0), 0);
+    toast(on ? `Showing sizes on ${n.toLocaleString()} images in the page tab. Red: over 2× larger than shown; amber: upscaled.` : 'Size badges removed from the page');
+  } catch (err) {
+    toast(`Could not inspect the page: ${explainScanError(err)}`);
+  }
+};
+
+// Favicon & app icon pack from the image in the preview.
+$('lbFavicon').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  try {
+    const blob = await fetchBlob(img);
+    const sizes = [...new Set([...ICO_SIZES, ...PNG_ICONS.map((i) => i.size)])];
+    const pngs = new Map();
+    for (const size of sizes) pngs.set(size, new Uint8Array(await (await squarePng(blob, size)).arrayBuffer()));
+    const now = new Date();
+    const zip = new ZipWriter();
+    zip.add('favicon.ico', buildIco(ICO_SIZES.map((size) => ({ size, data: pngs.get(size) }))), now);
+    for (const { size, name } of PNG_ICONS) zip.add(name, pngs.get(size), now);
+    const text = new TextEncoder();
+    zip.add('site.webmanifest', text.encode(webManifest(state.tab?.title || hostFromUrl(img.pageUrl || img.url))), now);
+    zip.add('favicon-tags.html', text.encode(faviconHtml()), now);
+    await saveBlob(new Blob([zip.finish()], { type: 'application/zip' }), `${imageBase(img)}-favicon-pack.zip`);
+    toast('Favicon pack saved: favicon.ico, PNG icons, site.webmanifest and the HTML tags');
+  } catch (err) {
+    toast(`Could not create the favicon pack: ${err.message}`);
+  }
+};
+
+// Responsive image set: WebP + JPEG/PNG at several widths and a <picture> snippet.
+$('lbResponsive').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  const label = 'Creating responsive set';
+  try {
+    const blob = await fetchBlob(img);
+    const sample = await pixelsOf(blob, 48, 48);
+    const { width, height } = sample.natural;
+    const transparent = hasTransparency(sample.data);
+    const fallback = transparent ? 'png' : 'jpg';
+    const widths = responsiveWidths(width);
+    const base = imageBase(img).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'image';
+    const zip = new ZipWriter();
+    const now = new Date();
+    startTask(label);
+    let done = 0;
+    for (const w of widths) {
+      for (const [ext, target] of [['webp', 'webp'], [fallback, transparent ? 'png' : 'jpeg']]) {
+        const out = await convert(blob, target, settings.jpegQuality, { maxWidth: w });
+        zip.add(`${base}-${w}.${ext}`, new Uint8Array(await out.arrayBuffer()), now);
+        progress(++done, widths.length * 2, label);
+      }
+    }
+    const snippet = responsiveSnippet({ base, widths, naturalWidth: width, naturalHeight: height, alt: img.alt || '', fallback });
+    zip.add('picture.html', new TextEncoder().encode(snippet), now);
+    endTask();
+    await saveBlob(new Blob([zip.finish()], { type: 'application/zip' }), `${base}-responsive.zip`);
+    toast(`Responsive set saved: ${widths.length} widths (${widths.join(', ')} px) as WebP and ${fallback.toUpperCase()}, plus picture.html`);
+  } catch (err) {
+    endTask();
+    toast(`Could not create the responsive set: ${err.message}`);
+  }
+};
+
+// Copy as data URI (Shift: as a CSS background-image).
+$('lbDataUri').onclick = async (e) => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  try {
+    const blob = await fetchBlob(img);
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    const text = e.shiftKey ? `background-image: url("${dataUrl}");` : dataUrl;
+    await navigator.clipboard.writeText(text);
+    const size = formatBytes(text.length);
+    toast(`${e.shiftKey ? 'CSS background' : 'Data URI'} copied (${size})${blob.size > 100 * 1024 ? '. Large images are better linked than inlined' : ''}`);
+  } catch (err) {
+    toast(`Could not copy the image: ${err.message}`);
+  }
+};
+
+// Colour picker: the browser's eyedropper (Chromium), anywhere on the screen.
+if ('EyeDropper' in window) {
+  $('lbEyedropper').classList.remove('hidden');
+  $('lbEyedropper').onclick = async () => {
+    try {
+      const { sRGBHex } = await new window.EyeDropper().open();
+      await navigator.clipboard.writeText(sRGBHex);
+      toast(`${sRGBHex} copied`);
+    } catch {
+      /* cancelled with Esc */
+    }
+  };
+}
+
 // ------------------------------------------------------------ keyboard
 
 document.addEventListener('keydown', (e) => {
@@ -2218,7 +2527,10 @@ document.addEventListener('keydown', (e) => {
   }
   if (typing) return;
   const mod = e.ctrlKey || e.metaKey;
-  if (e.key === '/') {
+  if (e.key === '?') {
+    e.preventDefault();
+    openShortcuts();
+  } else if (e.key === '/') {
     e.preventDefault();
     $('fText').focus();
   } else if (mod && e.key.toLowerCase() === 'a') {

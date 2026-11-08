@@ -48,6 +48,7 @@ export const DEFAULT_SETTINGS = {
   skipDownloaded: false,
   sendReferer: true,
   stripMetadata: false, // remove EXIF/GPS, XMP and comments from downloaded JPEG, PNG and WebP files
+  optimizeSvg: false, // remove comments, metadata and editor data from downloaded SVG files (see lib/svg.js)
   zipSources: true, // add sources.csv (where each file came from, with any credit found) to ZIP files
 
   // Prepare images before saving (see lib/prepare.js). The watermark logo is kept in local storage.

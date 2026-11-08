@@ -46,7 +46,17 @@ EDIT, CLEAN AND AUDIT
 • Save single frames of a GIF as PNG files
 • Image audit for web developers: missing alt text, oversized files, images that could be WebP and lazy-loading mistakes, with fixes and a CSV export. Audit a whole crawled site, page by page
 
-IMAGE SEO AUDIT (NEW)
+DEVELOPER AND DESIGNER TOOLS (NEW IN 1.7)
+• Broken image checker with a CSV of every failing URL and its error
+• Find transparent and animated images (GIF, APNG, WebP); sort by colour or shape
+• Favicon pack: favicon.ico, PNG icons, Apple touch icon and web manifest in one ZIP
+• Responsive image set: WebP plus fallback at 5 widths with a ready <picture> snippet
+• SVG optimizer, copy as data URI, two-image compare slider, colour picker
+• Editor adjustments: brightness, contrast, saturation, greyscale, sepia, blur
+• Inspect page: real vs displayed size badges, oversized images in red
+• Page weight report by type and domain, and a metadata CSV (camera, GPS, copyright)
+
+IMAGE SEO AUDIT
 • Alt text checker: missing, generic ("image", "IMG_1234.jpg"), keyword-stuffed, too long or reused alt text
 • File names: flags camera defaults and hashes, even behind image CDNs
 • Social sharing images: og:image and Twitter cards present, 1200×630, 1.91:1 and over https
