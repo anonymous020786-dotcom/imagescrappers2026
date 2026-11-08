@@ -1,5 +1,6 @@
 // Small Markdown subset for the guides, help and privacy pages: headings (h2/h3 get ids), paragraphs, lists,
 // tables, code blocks, images and "> " callouts. The content is our own, from the repository.
+import { responsiveAttrs } from './image-loader';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -8,7 +9,13 @@ export const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-'
 
 function inline(text: string) {
   return esc(text)
-    .replace(/!\[([^\]]*)\]\((\/[^)\s]+)\)/g, '<img src="$2" alt="$1" width="1280" height="800" loading="lazy" decoding="async">')
+    .replace(/!\[([^\]]*)\]\((\/[^)\s]+)\)/g, (_, alt: string, src: string) => {
+      // Screenshots in guides: responsive sizes through the image CDN (next/image can't run inside Markdown HTML).
+      const r = responsiveAttrs(src, '(max-width: 860px) calc(100vw - 32px), 780px');
+      const amp = (s: string) => s.replace(/&/g, '&amp;');
+      const set = r.srcset ? ` srcset="${amp(r.srcset)}" sizes="${r.sizes}"` : '';
+      return `<img src="${amp(r.src)}"${set} alt="${alt}" width="1280" height="800" loading="lazy" decoding="async">`;
+    })
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[\s(])_([^_]+)_(?=[\s).,;:]|$)/g, '$1<em>$2</em>')

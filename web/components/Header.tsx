@@ -1,5 +1,7 @@
 'use client';
+import Image from 'next/image';
 import Link from 'next/link';
+import icon from '@/public/assets/icon128.png';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { GithubIcon, MenuIcon } from './Icons';
@@ -38,7 +40,7 @@ export function Header() {
     <header className={`site-header${scrolled ? ' scrolled' : ''}`} id="top">
       <nav className={`wrap nav${open ? ' open' : ''}`} aria-label="Main">
         <Link className="brand" href="/" aria-label="Image Scraper Pro home">
-          <img src="/assets/icon128.png" alt="" width={34} height={34} />
+          <Image src={icon} alt="" width={34} height={34} preload />
           Image Scraper Pro
         </Link>
         <ul className="nav-links" id="nav-links">

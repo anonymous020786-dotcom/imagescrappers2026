@@ -9,6 +9,8 @@
 [build.environment]
   NODE_VERSION = "22"
   NEXT_TELEMETRY_DISABLED = "1"
+  # next/image goes through the Netlify Image CDN (web/lib/image-loader.ts)
+  NEXT_PUBLIC_IMAGE_CDN = "netlify"
 
 [[headers]]
   for = "/*"

@@ -1,4 +1,6 @@
+import Image from 'next/image';
 import Link from 'next/link';
+import icon from '@/public/assets/icon128.png';
 import { REPO, hrefFor } from '@/lib/site';
 import { ThemeSwitch } from './Theme';
 
@@ -47,7 +49,7 @@ export function Footer() {
         <div className="foot-grid">
           <div>
             <Link className="brand" href="/">
-              <img src="/assets/icon128.png" alt="" width={34} height={34} loading="lazy" />
+              <Image src={icon} alt="" width={34} height={34} />
               Image Scraper Pro
             </Link>
             <p style={{ marginTop: 14, maxWidth: 360 }}>The free, open-source image downloader and image SEO audit for every major browser.</p>

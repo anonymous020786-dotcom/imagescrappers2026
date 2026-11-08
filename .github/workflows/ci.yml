@@ -46,7 +46,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - name: Type check
-        run: npx --no-install next typegen && npm run typecheck
+        run: npm run typecheck
       - name: Static export and security headers
         run: npm run build
         env:

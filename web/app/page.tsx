@@ -1,5 +1,12 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
+// Static imports give next/image the real size and a blur placeholder (copied in by scripts/prepare-assets.mjs).
+import shotDashboard from '@/public/assets/screenshot-1.png';
+import shotSelection from '@/public/assets/screenshot-2.png';
+import shotPreview from '@/public/assets/screenshot-3.png';
+import shotCrawler from '@/public/assets/screenshot-4.png';
+import shotPopup from '@/public/assets/screenshot-5.png';
 import { AlsoOn, HeroInstallButton, VisitorBrowserMarker } from '@/components/BrowserAware';
 import { GuideGrid } from '@/components/Content';
 import {
@@ -90,28 +97,28 @@ const TOUR = [
     title: 'Select exactly what you need',
     text: 'Shift-click ranges, select all or invert, then filter by size presets like ≥800 px or HD. Analyze fetches the exact size, real type and true dimensions of every image.',
     points: ['Perceptual-hash duplicate detection', 'Keep the best copy of each duplicate group', 'Sort by resolution, size, name, type or domain'],
-    img: 2,
+    img: shotSelection,
     alt: 'A filtered selection of photos with their pixel sizes and file sizes shown after analysis',
   },
   {
     title: 'Preview every detail',
     text: 'Zoom up to 12×, pan and browse with the arrow keys. See dimensions, type, size, alt text, source, colour palette, camera data and licence information.',
     points: ['Reverse image search with Google Lens, Bing, TinEye or Yandex', 'Jump to the image on the original page', 'Copy the image or its URL in one click'],
-    img: 3,
+    img: shotPreview,
     alt: 'Lightbox preview of a landscape photo with a metadata panel listing its size, type and source',
   },
   {
     title: 'Scrape an entire website',
     text: 'The crawler follows links, "next page" buttons and sitemaps. Fast HTML mode handles hundreds of pages per minute; full-render mode runs JavaScript-built galleries.',
     points: ['Pause, resume and stop with a live activity log', 'Include and exclude patterns, depth and scope', 'Send results straight to the dashboard'],
-    img: 4,
+    img: shotCrawler,
     alt: 'The website crawler with start URLs, depth and scope settings and a live log of pages crawled',
   },
   {
     title: 'One click from the toolbar',
     text: 'The popup shows an instant image count and the largest images on the page. Quick download uses your saved filters and naming rules.',
     points: ['Right-click menus for single images and linked pages', "Side panel that follows the tab you're on", 'Light and dark themes, settings synced across devices'],
-    img: 5,
+    img: shotPopup,
     alt: 'The toolbar popup over a web page, showing the number of images found and the largest ones as thumbnails',
   },
 ];
@@ -257,11 +264,11 @@ export default function HomePage() {
                 <span />
                 <em>Image Scraper Pro — Dashboard</em>
               </div>
-              <img
-                src="/assets/screenshot-1.png"
-                width={1280}
-                height={800}
-                fetchPriority="high"
+              <Image
+                src={shotDashboard}
+                preload
+                placeholder="blur"
+                sizes="(max-width: 1040px) calc(100vw - 32px), 620px"
                 alt="Image Scraper Pro dashboard showing a grid of landscape photos found on a page, with size, type and source filters in the sidebar and download buttons at the bottom"
               />
             </figure>
@@ -486,7 +493,7 @@ export default function HomePage() {
                 </div>
                 <div className="shot-wrap reveal">
                   <div className="shot">
-                    <img src={`/assets/screenshot-${t.img}.png`} width={1280} height={800} loading="lazy" decoding="async" alt={t.alt} />
+                    <Image src={t.img} placeholder="blur" sizes="(max-width: 900px) calc(100vw - 32px), 640px" alt={t.alt} />
                   </div>
                 </div>
               </div>
