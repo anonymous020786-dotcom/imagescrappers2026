@@ -58,7 +58,7 @@ export function FeatureExplorer({ groups }: { groups: FeatureGroup[] }) {
             <div>
               <h2 id={`${g.id}-title`}>
                 {g.name}
-                {g.isNew && <span className="fx-new">New in 1.7</span>}
+                {g.isNew && <span className="fx-new">New in 1.8</span>}
               </h2>
               {g.note && <p className="fx-note">{g.note}</p>}
               {g.intro && <p className="fx-intro">{g.intro}</p>}

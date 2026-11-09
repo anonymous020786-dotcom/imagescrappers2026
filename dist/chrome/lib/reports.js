@@ -62,3 +62,20 @@ export function metadataToCSV(rows) {
 export function brokenToCSV(images) {
   return csv([['url', 'page', 'error'], ...images.filter((i) => i.broken).map((i) => [i.url, i.pageUrl ?? '', i.broken])]);
 }
+
+// Measured WebP savings: `rows` are { img, bytes, webpBytes } from a real conversion of each image.
+export function savingsToCSV(rows) {
+  const out = [['url', 'page', 'type', 'bytes', 'webp_bytes', 'saving_bytes', 'saving_percent']];
+  for (const { img, bytes, webpBytes } of rows) {
+    const saving = bytes - webpBytes;
+    out.push([img.url, img.pageUrl ?? '', img.type ?? '', bytes, webpBytes, saving, bytes ? Math.round((saving / bytes) * 1000) / 10 : 0]);
+  }
+  return csv(out);
+}
+
+export function savingsSummary(rows) {
+  const bytes = rows.reduce((s, r) => s + r.bytes, 0);
+  // Only conversions that come out smaller count: a site would keep the original otherwise.
+  const saved = rows.reduce((s, r) => s + Math.max(0, r.bytes - r.webpBytes), 0);
+  return { count: rows.length, bytes, saved, percent: bytes ? Math.round((saved / bytes) * 100) : 0, smaller: rows.filter((r) => r.webpBytes < r.bytes).length };
+}

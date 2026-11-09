@@ -46,7 +46,14 @@ EDIT, CLEAN AND AUDIT
 • Save single frames of a GIF as PNG files
 • Image audit for web developers: missing alt text, oversized files, images that could be WebP and lazy-loading mistakes, with fixes and a CSV export. Audit a whole crawled site, page by page
 
-DEVELOPER AND DESIGNER TOOLS (NEW IN 1.7)
+PAGE SPEED, QUALITY AND CREATIVE TOOLS (NEW IN 1.8)
+• Core Web Vitals: check the LCP image (lazy-loading, fetchpriority, size) and images that shift the layout (CLS)
+• Find blurry photos, see JPEG quality and progressive/baseline encoding, and view a histogram
+• WCAG contrast checker; save palettes for GIMP (.gpl), Adobe (.ase), Tailwind or design tokens
+• BlurHash and LQIP placeholders, CSS sprite sheets and a measured WebP savings report
+• Trim borders, remove a solid background, split into tiles, beautify screenshots, slideshow
+
+DEVELOPER AND DESIGNER TOOLS
 • Broken image checker with a CSV of every failing URL and its error
 • Find transparent and animated images (GIF, APNG, WebP); sort by colour or shape
 • Favicon pack: favicon.ico, PNG icons, Apple touch icon and web manifest in one ZIP

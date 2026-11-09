@@ -532,5 +532,95 @@
     }
   }
 
-  globalThis.__imageScraper = { scan, autoScroll, highlight, fetchAsDataUrl, watch, pick, count, links, inspect };
+  // Page speed facts for the Core Web Vitals check (judged in lib/vitals.js): the Largest Contentful Paint element
+  // as measured by the browser (or, where that isn't available, the largest image in the first screen), the
+  // measured layout shift, and every image whose space isn't reserved before it loads.
+  function observe(type) {
+    if (typeof PerformanceObserver === 'undefined' || !PerformanceObserver.supportedEntryTypes?.includes(type)) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const entries = [];
+      const po = new PerformanceObserver((list) => entries.push(...list.getEntries()));
+      po.observe({ type, buffered: true });
+      setTimeout(() => {
+        entries.push(...po.takeRecords());
+        po.disconnect();
+        resolve(entries);
+      }, 150);
+    });
+  }
+
+  function imageFacts(el, url) {
+    const r = el.getBoundingClientRect();
+    const isImg = el instanceof HTMLImageElement;
+    return {
+      kind: 'image',
+      tag: el.tagName.toLowerCase(),
+      url: url || (isImg ? el.currentSrc || el.src : ''),
+      source: isImg ? 'img' : el.tagName === 'VIDEO' ? 'poster' : 'css',
+      loading: isImg ? el.loading || el.getAttribute('loading') || '' : '',
+      fetchPriority: (el.fetchPriority || el.getAttribute('fetchpriority') || '').toLowerCase(),
+      lazyScript: isImg && !el.getAttribute('src') && el.hasAttribute('data-src'),
+      preloaded: [...document.querySelectorAll('link[rel~="preload"][as="image"]')].some((l) => l.href === url),
+      natural: isImg ? { width: el.naturalWidth, height: el.naturalHeight } : null,
+      displayed: { width: Math.round(r.width), height: Math.round(r.height) },
+      dpr: window.devicePixelRatio || 1,
+    };
+  }
+
+  async function speed() {
+    const [lcpEntries, shifts] = await Promise.all([observe('largest-contentful-paint'), observe('layout-shift')]);
+    let lcp = null;
+    const last = lcpEntries?.at(-1);
+    if (last?.element && last.element.isConnected) {
+      const el = last.element;
+      const isMedia = el instanceof HTMLImageElement || el instanceof SVGImageElement || el.tagName === 'VIDEO' || last.url;
+      lcp = isMedia
+        ? { ...imageFacts(el, last.url), renderTime: Math.round(last.renderTime || last.loadTime || last.startTime), method: 'measured' }
+        : { kind: 'text', tag: el.tagName.toLowerCase(), renderTime: Math.round(last.renderTime || last.startTime), method: 'measured' };
+    } else {
+      // No LCP API (Firefox, Safari): the largest image in the first screen of the document.
+      let best = null;
+      let bestArea = 0;
+      for (const img of document.images) {
+        const r = img.getBoundingClientRect();
+        const top = r.top + scrollY;
+        if (top >= innerHeight || r.width < 2 || r.height < 2) continue;
+        const area = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(top + r.height, innerHeight) - Math.max(top, 0));
+        if (area > bestArea) {
+          best = img;
+          bestArea = area;
+        }
+      }
+      if (best) lcp = { ...imageFacts(best), renderTime: null, method: 'estimated' };
+    }
+
+    let cls = null;
+    if (shifts) cls = Math.round(shifts.filter((s) => !s.hadRecentInput).reduce((sum, s) => sum + s.value, 0) * 1000) / 1000;
+
+    const images = [];
+    for (const img of document.images) {
+      const url = img.currentSrc || img.src || img.getAttribute('data-src') || '';
+      if (!url || url.startsWith('data:')) continue;
+      const style = getComputedStyle(img);
+      if (style.display === 'none' || style.visibility === 'hidden') continue;
+      const r = img.getBoundingClientRect();
+      if (r.width <= 2 && r.height <= 2 && img.complete && img.naturalWidth <= 2) continue; // tracking pixels
+      const reserved =
+        (img.hasAttribute('width') && img.hasAttribute('height')) ||
+        (style.aspectRatio && style.aspectRatio !== 'auto' && !style.aspectRatio.startsWith('auto ')) ||
+        style.position === 'absolute' ||
+        style.position === 'fixed' ||
+        (img.style.width && img.style.height && !/%|auto/.test(img.style.width + img.style.height));
+      images.push({
+        url,
+        reserved: Boolean(reserved),
+        aboveFold: r.top + scrollY < innerHeight,
+        natural: img.naturalWidth ? { width: img.naturalWidth, height: img.naturalHeight } : null,
+        displayed: { width: Math.round(r.width), height: Math.round(r.height) },
+      });
+    }
+    return { lcp, cls, images, url: location.href };
+  }
+
+  globalThis.__imageScraper = { scan, autoScroll, highlight, fetchAsDataUrl, watch, pick, count, links, inspect, speed };
 })();

@@ -112,6 +112,11 @@ const MEDIA = {
   '/media/anim.gif': ['image/gif', makeGif([1, 2])],
   // Left half opaque green, right half fully transparent.
   '/media/clear.png': ['image/png', makePng(300, 300, (x) => [40, 160, 90, x < 150 ? 255 : 0])],
+  // 1.8 tools: a red/blue checker inside a 20 px white frame; a smooth gradient; fine detail; an unsized image.
+  '/media/framed.png': ['image/png', makePng(200, 120, (x, y) => (x < 20 || x >= 180 || y < 20 || y >= 100 ? [255, 255, 255] : (Math.floor(x / 10) + Math.floor(y / 10)) % 2 ? [220, 30, 30] : [30, 60, 220]))],
+  '/media/soft.png': ['image/png', makePng(256, 256, (x, y) => [x, Math.round((x + y) / 2), y])],
+  '/media/sharp.png': ['image/png', makePng(256, 256, (x, y) => (((x >> 1) + (y >> 1)) % 2 ? [250, 250, 250] : [5, 5, 5]))],
+  '/media/unsized.png': ['image/png', makePng(64, 48, () => [90, 90, 200])],
   '/media/drawing.svg': ['image/svg+xml', Buffer.from(`<?xml version="1.0"?>
 <!-- Created with Inkscape -->
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="120" height="120" inkscape:version="1.2">
@@ -1091,8 +1096,275 @@ try {
     await dash3.keyboard.press('Escape');
     await dash3.waitForFunction(() => !document.getElementById('shortcutsDialog').open);
   });
+  // ------------------------------------------------------------- tools added in 1.8
+  // A baseline JPEG hero (the canvas encoder writes baseline JPEGs), made in an extension page.
+  MEDIA['/media/hero.jpg'] = ['image/jpeg', Buffer.from(await dash3.evaluate(async () => {
+    const c = new OffscreenCanvas(1200, 600);
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 1200, 600);
+    g.addColorStop(0, '#203070');
+    g.addColorStop(1, '#c04070');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 1200, 600);
+    for (let i = 0; i < 60; i++) {
+      ctx.fillStyle = i % 2 ? '#ffffff' : '#101010';
+      ctx.fillRect(i * 20, 280, 10, 40);
+    }
+    return [...new Uint8Array(await (await c.convertToBlob({ type: 'image/jpeg', quality: 0.8 })).arrayBuffer())];
+  }))];
   await toolsPage.close();
   await dash3.close();
+
+  const studioPage = await context.newPage();
+  await studioPage.goto(`${base}/studio.html`);
+  await studioPage.waitForLoadState('load');
+  await studioPage.waitForFunction(() => [...document.images].every((i) => i.complete));
+  const studioTab = await worker.evaluate(async (url) => (await chrome.tabs.query({ url }))[0].id, `${base}/studio.html`);
+  const dash4 = await context.newPage();
+  await dash4.goto(`chrome-extension://${extId}/dashboard/dashboard.html?tabId=${studioTab}`);
+  await dash4.waitForFunction(() => document.querySelectorAll('#gallery .card').length >= 5, null, { timeout: 15000 });
+  await dash4.click('#resetFilters');
+  const studioCards = () => dash4.$$eval('#gallery .card .url', (els) => els.map((e) => e.textContent.split('/').pop()).sort());
+  const studioToast = (re) => dash4.waitForFunction((src) => new RegExp(src).test(document.querySelector('.toast')?.textContent ?? ''), re.source, { timeout: 20000 });
+  const card = (name) => `#gallery .card:has(.url:text-matches("${name}$"))`;
+  const openStudio = async (name) => {
+    await dash4.dblclick(card(name));
+    await dash4.waitForSelector('#lightbox:not(.hidden)');
+  };
+  const closeStudio = () => dash4.evaluate(() => document.getElementById('lbClose').click());
+  const moreTools = async () => {
+    if (!(await dash4.$eval('#lbMore', (d) => d.open))) await dash4.click('#lbMore summary');
+  };
+  const pngSize = (buf) => [buf.readUInt32BE(16), buf.readUInt32BE(20)];
+  const downloaded = async (mime, since) => {
+    const d = await latestDownload(mime, since);
+    assert.ok(!d.missing, JSON.stringify(d.missing));
+    return readFileSync(d.filename);
+  };
+  const selectOnly = async (...names) => {
+    await dash4.click('#selNone');
+    for (const n of names) await dash4.click(card(n));
+  };
+
+  await check('Analyze: sharpness filter, JPEG encoding details in the preview', async () => {
+    await dash4.click('#analyze');
+    await studioToast(/Analysis complete/);
+    const show = async (prop) => {
+      await dash4.selectOption('#fProps', prop);
+      await dash4.waitForTimeout(150);
+      return studioCards();
+    };
+    try {
+      const blurry = await show('blurry');
+      assert.ok(blurry.includes('soft.png') && !blurry.includes('sharp.png'), JSON.stringify(blurry));
+      assert.ok((await show('sharp')).includes('sharp.png'));
+      assert.deepEqual(await show('baseline'), ['hero.jpg']);
+      assert.deepEqual(await show('progressive'), []);
+    } finally {
+      await dash4.selectOption('#fProps', 'any');
+    }
+    await openStudio('hero.jpg');
+    try {
+      const meta = await dash4.textContent('#lbMeta');
+      assert.match(meta, /Encodingquality ≈ (7[5-9]|8[0-5]) · baseline · 4:2:0/);
+      assert.match(meta, /Sharpness\d/);
+    } finally {
+      await closeStudio();
+    }
+  });
+
+  await check('Page speed: lazy-loaded LCP image and unsized images, with a CSV', async () => {
+    await dash4.click('#speedBtn');
+    await dash4.waitForSelector('#speedDialog[open]');
+    try {
+      const lcp = await dash4.textContent('#speedLcp');
+      assert.match(lcp, /hero\.jpg/);
+      assert.match(lcp, /Measured by the browser/);
+      assert.ok(await dash4.$('#speedLcp .lvl-bad:text-matches("loading=.lazy")'), lcp);
+      assert.ok(await dash4.$('#speedLcp .lvl-warn:text-matches("fetchpriority")'));
+      const cls = await dash4.textContent('#speedCls');
+      assert.match(cls, /Measured layout shift so far: [\d.]+/);
+      assert.match(cls, /1 of 5 images have no width and height/);
+      assert.match(cls, /unsized\.png.*width="64" height="48"/);
+      const since = now();
+      await dash4.click('#speedCsv');
+      const csv = (await downloaded('text/csv', since)).toString();
+      assert.match(csv, /^check,url,level,detail\n/);
+      assert.match(csv, /Unsized image \(CLS\),http:\/\/[^,]+\/media\/unsized\.png,/);
+    } finally {
+      await dash4.click('#speedClose');
+    }
+  });
+
+  await check('Histogram and exposure check', async () => {
+    await openStudio('sharp.png');
+    try {
+      await moreTools();
+      await dash4.click('#lbHistogram');
+      await dash4.waitForSelector('#lbHisto:not(.hidden) canvas.histogram');
+      const text = await dash4.textContent('#lbHisto');
+      assert.match(text, /Exposure/);
+      assert.match(text, /Pure white/);
+    } finally {
+      await closeStudio();
+    }
+  });
+
+  await check('Palette: WCAG contrast check and .gpl / .ase exports', async () => {
+    await openStudio('framed.png');
+    try {
+      await dash4.click('#lbColours');
+      await dash4.waitForSelector('#lbPalette .contrast-result');
+      await dash4.selectOption('#lbPalette select[data-contrast="fg"]', '#000000');
+      await dash4.selectOption('#lbPalette select[data-contrast="bg"]', '#ffffff');
+      assert.match(await dash4.textContent('#lbPalette .contrast-result'), /^21:1 · Normal text AA ✓ AAA ✓/);
+      let since = now();
+      await dash4.click('#lbPalette [data-palette-export="palette.gpl"]');
+      assert.match((await downloaded('text/plain', since)).toString(), /^GIMP Palette\nName: framed palette\n/);
+      since = now();
+      await dash4.click('#lbPalette [data-palette-export="palette.ase"]');
+      assert.equal((await downloaded('application/octet-stream', since)).subarray(0, 4).toString(), 'ASEF');
+    } finally {
+      await closeStudio();
+    }
+  });
+
+  await check('Trim borders crops the plain frame', async () => {
+    await openStudio('framed.png');
+    try {
+      await moreTools();
+      const since = now();
+      await dash4.click('#lbTrim');
+      await studioToast(/Trimmed from 200×120 to 160×80 px/);
+      assert.deepEqual(pngSize(await downloaded('image/png', since)), [160, 80]);
+    } finally {
+      await closeStudio();
+    }
+  });
+
+  await check('Remove background makes the white frame transparent', async () => {
+    await openStudio('framed.png');
+    try {
+      await moreTools();
+      const since = now();
+      await dash4.click('#lbRemoveBg');
+      await studioToast(/Background removed: \d+%/);
+      const png = await downloaded('image/png', since);
+      const alpha = await dash4.evaluate(async (b64) => {
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+        const c = new OffscreenCanvas(bmp.width, bmp.height);
+        const ctx = c.getContext('2d');
+        ctx.drawImage(bmp, 0, 0);
+        return [ctx.getImageData(2, 2, 1, 1).data[3], ctx.getImageData(100, 60, 1, 1).data[3]];
+      }, png.toString('base64'));
+      assert.deepEqual(alpha, [0, 255]);
+    } finally {
+      await closeStudio();
+    }
+  });
+
+  await check('Split into tiles: a 2 × 2 grid as a ZIP', async () => {
+    await openStudio('framed.png');
+    try {
+      await moreTools();
+      await dash4.click('#lbTiles');
+      await dash4.waitForSelector('#tilesDialog[open]');
+      await dash4.selectOption('#tilesPreset', '2x2');
+      assert.match(await dash4.textContent('#tilesInfo'), /4 tiles of about 100 × 60 px/);
+      const since = now();
+      await dash4.click('#tilesSave');
+      const files = readStoredZip(await downloaded('application/zip', since));
+      assert.deepEqual([...files.keys()].sort(), ['framed-01.png', 'framed-02.png', 'framed-03.png', 'framed-04.png']);
+      assert.deepEqual(pngSize(files.get('framed-04.png')), [100, 60]);
+    } finally {
+      await closeStudio();
+    }
+  });
+
+  await check('Beautify / mockup: padding and window bar, saved as PNG', async () => {
+    await openStudio('framed.png');
+    try {
+      await moreTools();
+      await dash4.click('#lbMockup');
+      await dash4.waitForSelector('#mockupDialog[open]');
+      // 200×120 + a 24 px window bar = 200×144; padding 8% of 200 = 16 px on each side.
+      await dash4.waitForFunction(() => document.getElementById('mockupPreview').dataset.size === '232x176');
+      await dash4.uncheck('#mockupBar');
+      await dash4.waitForFunction(() => document.getElementById('mockupPreview').dataset.size === '232x152');
+      const since = now();
+      await dash4.click('#mockupSave');
+      assert.deepEqual(pngSize(await downloaded('image/png', since)), [232, 152]);
+    } finally {
+      await dash4.evaluate(() => document.getElementById('mockupDialog').close());
+      await closeStudio();
+    }
+  });
+
+  await check('Slideshow plays the selected images and P pauses it', async () => {
+    await selectOnly('soft.png', 'sharp.png');
+    await dash4.click('#slideshowBtn');
+    await dash4.waitForSelector('#lightbox:not(.hidden)');
+    try {
+      assert.match(await dash4.textContent('#lbPlay'), /Pause/);
+      const first = await dash4.textContent('#lbTitle');
+      await dash4.waitForFunction((t) => document.getElementById('lbTitle').textContent !== t, first, { timeout: 6000 });
+      assert.ok(['Soft', 'Sharp'].includes(await dash4.textContent('#lbTitle')));
+      await dash4.keyboard.press('p');
+      assert.match(await dash4.textContent('#lbPlay'), /Play/);
+    } finally {
+      await closeStudio();
+      await dash4.click('#selNone');
+    }
+  });
+
+  await check('WebP savings report measures real conversions', async () => {
+    await selectOnly('framed.png', 'soft.png', 'hero.jpg');
+    const since = now();
+    await dash4.click('#exportBtn');
+    await dash4.click('#exportMenu [data-export="savings"]');
+    await studioToast(/WebP would save .* on \d of 3 images/);
+    const rows = (await downloaded('text/csv', since)).toString().trim().split('\n');
+    assert.equal(rows[0], 'url,page,type,bytes,webp_bytes,saving_bytes,saving_percent');
+    assert.equal(rows.length, 4);
+    for (const r of rows.slice(1)) {
+      const [, , , bytes, webp, saving] = r.split(',').slice(-7);
+      assert.equal(Number(bytes) - Number(webp), Number(saving));
+    }
+  });
+
+  await check('Placeholders: BlurHash, LQIP and average colour as JSON', async () => {
+    await selectOnly('framed.png', 'hero.jpg');
+    const since = now();
+    await dash4.click('#exportBtn');
+    await dash4.click('#exportMenu [data-export="placeholders"]');
+    await studioToast(/Saved placeholders for 2 images/);
+    const json = JSON.parse((await downloaded('application/json', since)).toString());
+    assert.equal(json.length, 2);
+    const hero = json.find((p) => p.url.endsWith('hero.jpg'));
+    assert.equal(hero.width, 1200);
+    assert.equal(hero.blurhash.length, 28);
+    assert.match(hero.color, /^#[0-9a-f]{6}$/);
+    assert.match(hero.lqip, /^data:image\/webp;base64,/);
+  });
+
+  await check('CSS sprite sheet: one PNG, CSS offsets and a demo page', async () => {
+    await selectOnly('framed.png', 'unsized.png', 'soft.png');
+    const since = now();
+    await dash4.click('#exportBtn');
+    await dash4.click('#exportMenu [data-export="sprite"]');
+    await studioToast(/Sprite sheet saved: 3 images/);
+    const files = readStoredZip(await downloaded('application/zip', since));
+    assert.deepEqual([...files.keys()].sort(), ['sprite.css', 'sprite.html', 'sprite.png']);
+    const css = files.get('sprite.css').toString();
+    for (const n of ['framed', 'unsized', 'soft']) assert.match(css, new RegExp(`\\.sprite-${n} \\{ width: \\d+px; height: \\d+px; background-position:`));
+    const [w, h] = pngSize(files.get('sprite.png'));
+    assert.ok(w >= 256 && h >= 256, `${w}×${h}`);
+    await dash4.click('#selNone');
+  });
+
+  await studioPage.close();
+  await dash4.close();
 
   await check('options page shows the download log and sources.csv switch', async () => {
     const opts = await context.newPage();

@@ -9,6 +9,7 @@ import { fitToBytes, planGeometry, watermarkPosition } from './prepare.js';
 import { mergeRights } from './rights.js';
 import { fitInCell } from './sheet.js';
 import { hasTransparency, isAnimated } from './props.js';
+import { encodingInfo, sharpness } from './quality.js';
 
 const blobCache = new Map();
 const MAX_CACHE_BYTES = 400 * 1024 * 1024;
@@ -159,6 +160,8 @@ export async function analyze(img, signal) {
   const rights = mergeRights(img.rights, readRights(bytes));
   if (rights) info.rights = rights;
   info.animated = isAnimated(bytes);
+  const encoding = encodingInfo(bytes);
+  if (encoding) info.encoding = encoding;
   try {
     const decoded = await decode(blob);
     info.width = decoded.width;
@@ -166,11 +169,111 @@ export async function analyze(img, signal) {
     info.hash = dHash(decoded.el);
     info.color = dominantColor(decoded.el);
     info.transparent = transparent(decoded.el);
+    // Sharpness of raster images big enough to judge (SVG is always crisp).
+    if (type !== 'svg' && decoded.width >= 64 && decoded.height >= 64) info.sharpness = sharpnessOf(decoded.el, decoded.width, decoded.height);
     URL.revokeObjectURL(decoded.url);
   } catch {
     // Undecodable (e.g. TIFF in Chrome): keep byte info only.
   }
   return info;
+}
+
+// Sharpness measured on a copy of at most 512 px, so scores are comparable between images of any size.
+function sharpnessOf(el, width, height) {
+  const k = Math.min(1, 512 / Math.max(width, height));
+  const w = Math.max(3, Math.round(width * k));
+  const h = Math.max(3, Math.round(height * k));
+  const c = canvas(w, h);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(el, 0, 0, w, h);
+  return sharpness(ctx.getImageData(0, 0, w, h).data, w, h);
+}
+
+// All pixels of an image, scaled down so the longer side is at most `maxSide` (0: full size).
+export async function imagePixels(blob, maxSide = 0) {
+  const decoded = await decode(blob);
+  try {
+    const k = maxSide > 0 ? Math.min(1, maxSide / Math.max(decoded.width, decoded.height)) : 1;
+    const width = Math.max(1, Math.round(decoded.width * k));
+    const height = Math.max(1, Math.round(decoded.height * k));
+    const c = canvas(width, height);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(decoded.el, 0, 0, width, height);
+    return { data: ctx.getImageData(0, 0, width, height).data, width, height, natural: { width: decoded.width, height: decoded.height } };
+  } finally {
+    URL.revokeObjectURL(decoded.url);
+  }
+}
+
+// Encodes RGBA pixels (optionally only the `rect` part) as an image file.
+export async function pixelsToBlob(data, width, height, mime = 'image/png', quality = 0.92, rect = null) {
+  const r = rect ?? { x: 0, y: 0, width, height };
+  const c = canvas(r.width, r.height);
+  const ctx = c.getContext('2d');
+  if (mime === 'image/jpeg') {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, r.width, r.height);
+    // putImageData ignores the white fill, so composite through a second canvas.
+    const src = canvas(width, height);
+    src.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(data), width, height), 0, 0);
+    ctx.drawImage(src, r.x, r.y, r.width, r.height, 0, 0, r.width, r.height);
+  } else {
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(data), width, height), -r.x, -r.y, r.x, r.y, r.width, r.height);
+  }
+  return encode(c, mime, quality);
+}
+
+// A presentation image: the picture on a gradient background with padding, rounded corners, a soft shadow
+// and an optional browser-window bar. Layout from pixels.js mockupLayout.
+export async function renderMockup(blob, layout, { colours = null, shadow = true, dark = false } = {}) {
+  const decoded = await decode(blob);
+  try {
+    const c = canvas(layout.width, layout.height);
+    const ctx = c.getContext('2d');
+    if (colours) {
+      const g = ctx.createLinearGradient(0, 0, layout.width, layout.height);
+      g.addColorStop(0, colours[0]);
+      g.addColorStop(1, colours[1]);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, layout.width, layout.height);
+    }
+    const { frame, image, bar, radius } = layout;
+    const path = () => {
+      ctx.beginPath();
+      ctx.roundRect(frame.x, frame.y, frame.width, frame.height, radius);
+    };
+    if (shadow) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(15, 12, 40, 0.35)';
+      ctx.shadowBlur = Math.round(Math.max(frame.width, frame.height) * 0.04);
+      ctx.shadowOffsetY = Math.round(ctx.shadowBlur / 3);
+      ctx.fillStyle = dark ? '#1b1c26' : '#ffffff';
+      path();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.save();
+    path();
+    ctx.clip();
+    if (bar) {
+      ctx.fillStyle = dark ? '#2a2b38' : '#ececf1';
+      ctx.fillRect(frame.x, frame.y, frame.width, bar);
+      const dot = Math.max(4, Math.round(bar * 0.18));
+      ['#ff5f57', '#febc2e', '#28c840'].forEach((col, i) => {
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(frame.x + bar * 0.6 + i * dot * 3.2, frame.y + bar / 2, dot, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(decoded.el, image.x, image.y, image.width, image.height);
+    ctx.restore();
+    return await encode(c, 'image/png');
+  } finally {
+    URL.revokeObjectURL(decoded.url);
+  }
 }
 
 const CONVERT_MIME = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' };
