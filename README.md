@@ -48,7 +48,7 @@ npm run build:chrome   # or a single target: chrome | edge | brave | opera | viv
 
 Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 
-## Features (135+)
+## Features (150+)
 
 ### Detection: finding every image
 1. `<img>` elements, including their natural (intrinsic) dimensions
@@ -200,6 +200,23 @@ Store uploads: use `dist/image-scraper-pro-<browser>-<version>.zip`.
 125. **Page weight report**: total image weight of the page, broken down by file type and by domain, plus the heaviest images, with bar charts
 126. **Keyboard shortcuts panel**: press `?` in the dashboard to see every shortcut, grouped by dashboard, preview and browser
 127. **Colour picker**: pick the exact colour of any pixel in a preview and copy its HEX code (browsers with the `EyeDropper` API; the button is hidden elsewhere)
+
+### Page speed, quality and creative tools
+128. **LCP image check**: finds the page's Largest Contentful Paint image as measured by the browser (or the largest image in the first screen where the browser doesn't report it), with its load time and fixes: no `loading="lazy"`, add `fetchpriority="high"`, preload CSS backgrounds, serve a smaller size or a modern format
+129. **Layout shift (CLS) check**: lists every image without a reserved size (no `width` and `height`, no CSS `aspect-ratio`), first-screen images first, with the exact attributes to add and the page's measured layout shift. Save the report as CSV
+130. **Sharpness detection**: Analyze measures how much fine detail each image has. Filter by *Low sharpness (may be blurry)* or *Sharp* to find soft or out-of-focus photos
+131. **Encoding inspector**: after Analyze, the preview shows how each file was saved: estimated JPEG quality, progressive or baseline, chroma subsampling, PNG bit depth and colour type, interlacing and an embedded ICC profile. Filter by *Progressive JPEG* or *Baseline JPEG*
+132. **Histogram and exposure**: red, green and blue histogram of an image, with its average brightness, contrast, clipped shadows and highlights, and a plain verdict (balanced, mostly dark, mostly bright, low contrast)
+133. **WCAG contrast checker**: test any two colours from an image's palette (or white and black) and see the contrast ratio and whether it passes AA and AAA for normal and large text
+134. **Palette export**: save an image's colours for GIMP, Inkscape and Krita (`.gpl`), Photoshop and Illustrator (`.ase`), Tailwind CSS (v4 `@theme` and v3 config) or as design tokens (`.json`)
+135. **Placeholders for lazy loading**: export a BlurHash, a tiny WebP preview (LQIP, as a data URI) and the average colour of each image as JSON, ready for Next.js, Gatsby or your own blur-up loading
+136. **CSS sprite sheet**: pack the selected images into one PNG with a `sprite.css` of class names and offsets, plus a demo page
+137. **Split into tiles**: cut an image into a grid (Instagram carousel 3 × 1, grid 3 × 3, or any columns and rows), numbered in order, without losing a pixel
+138. **Trim borders**: remove plain rows and columns around an image (white, black, any solid colour or transparency) in one click
+139. **Remove a solid background**: makes a plain background transparent with a flood fill from the edges, so the same colour inside the subject is kept, with softened edges. Saved as PNG
+140. **Beautify / mockup**: put a screenshot or image on a gradient background with padding, rounded corners, a soft shadow and an optional browser-window bar, with a live preview. Download or copy as PNG
+141. **Slideshow**: play the selected images (or all shown) one after another, full screen, with `P` to pause. The time per image is in the settings
+142. **WebP savings report**: converts each selected image to WebP on your device and measures the real difference, with the total saving and a CSV of every file. The image audit then uses these measured numbers
 
 ### Browser integration
 - Right-click menus: download an image with your naming rules, download a linked image, copy an image URL, reverse search, download all images on the page, scrape all tabs

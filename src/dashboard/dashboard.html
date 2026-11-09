@@ -28,6 +28,7 @@
       <button id="collectionsBtn" title="Images you saved to collections">★ Collections</button>
       <button id="historyBtn" title="Previous scrapes">🕘 History</button>
       <button id="inspectBtn" title="Show each image's real and displayed size on the page; oversized images are marked in red">⌗ Inspect page</button>
+      <button id="speedBtn" title="Check the page's largest image (LCP) and images that shift the layout (CLS)">⚡ Page speed</button>
       <button id="themeBtn" title="Switch theme">◐</button>
       <button id="shortcutsBtn" title="Keyboard shortcuts (?)">⌨</button>
       <a class="button" href="https://image-scraper-pro.netlify.app/guides/?utm_source=extension&amp;utm_medium=dashboard" target="_blank" rel="noopener" title="Help, guides and how-tos (opens the website)">? Help</a>
@@ -81,6 +82,10 @@
           <option value="animated">Animated (GIF, APNG, WebP)</option>
           <option value="still">Not animated</option>
           <option value="broken">Broken (failed to load)</option>
+          <option value="blurry">Low sharpness (may be blurry)</option>
+          <option value="sharp">Sharp</option>
+          <option value="progressive">Progressive JPEG</option>
+          <option value="baseline">Baseline JPEG</option>
         </select>
       </section>
 
@@ -175,6 +180,7 @@
         <button id="similarClear" class="hidden" title="Back to all images">Similar images ✕</button>
         <button id="auditBtn" title="Accessibility, performance and SEO check of this page's images (alt text, file names, social images, oversized files, lazy loading…)">Audit</button>
         <button id="weightBtn" title="Total image weight by type and domain, and the heaviest images (after Analyze)">Weight</button>
+        <button id="slideshowBtn" title="Play the selected images (or all shown) full screen, one after another">▶ Slideshow</button>
         <button id="compareBtn" class="hidden" title="Compare the two selected images with a slider and a measured difference">Compare</button>
         <div class="seg">
           <button id="viewGrid" title="Grid view">▦</button>
@@ -226,6 +232,9 @@
         <button data-export="sheet">Contact sheet (.png)</button>
         <button data-export="metadata" title="Camera, lens, date, exposure, GPS and credit of each photo">Photo metadata (.csv)</button>
         <button data-export="broken" title="Images that failed to load during Analyze, with the reason">Broken images (.csv)</button>
+        <button data-export="savings" title="Converts each image to WebP on your device and measures how much smaller it gets">WebP savings report (.csv)</button>
+        <button data-export="placeholders" title="BlurHash, a tiny preview image and the average colour of each image, for lazy-loading placeholders">Placeholders: BlurHash &amp; LQIP (.json)</button>
+        <button data-export="sprite" title="Packs the images into one PNG with the CSS to show each one">CSS sprite sheet (.zip)</button>
         <hr>
         <button data-copy="markdown">Copy as Markdown</button>
         <button data-copy="html">Copy as HTML</button>
@@ -269,8 +278,20 @@
         <button id="lbResponsive" title="Create WebP and JPEG/PNG versions at several widths plus a ready &lt;picture&gt; snippet (ZIP)">Responsive set</button>
         <button id="lbDataUri" title="Copy this image as a base64 data URI (Shift+click: as a CSS background-image)">Copy data URI</button>
         <button id="lbEyedropper" class="hidden" title="Pick any colour on the screen and copy its HEX code">Pick colour</button>
+        <button id="lbPlay" title="Slideshow: show the next image every few seconds (P)">▶ Play</button>
       </div>
+      <details id="lbMore" class="lb-more">
+        <summary>More image tools</summary>
+        <div class="lb-actions">
+          <button id="lbHistogram" title="Brightness and colour histogram with an exposure check">Histogram</button>
+          <button id="lbTrim" title="Remove plain borders around the image and download the result">Trim borders</button>
+          <button id="lbRemoveBg" title="Make a solid background colour transparent (PNG)">Remove background</button>
+          <button id="lbTiles" title="Cut the image into a grid of tiles, e.g. for an Instagram carousel (ZIP)">Split into tiles…</button>
+          <button id="lbMockup" title="Put the image on a background with padding, rounded corners and a shadow">Beautify / mockup…</button>
+        </div>
+      </details>
       <section id="lbPalette" class="lb-exif hidden" aria-live="polite"></section>
+      <section id="lbHisto" class="lb-exif hidden" aria-live="polite"></section>
       <section id="lbExif" class="lb-exif hidden" aria-live="polite"></section>
       <p class="muted small">Scroll or click to zoom · drag to pan · ← → to browse · Space to select</p>
     </aside>
@@ -592,6 +613,74 @@
     </div>
     <h4>Heaviest images</h4>
     <div id="weightHeaviest" class="audit-list"></div>
+  </dialog>
+
+  <dialog id="speedDialog" class="import-dialog audit-dialog">
+    <div class="dialog-head">
+      <h3>Page speed: images</h3>
+      <button id="speedClose" title="Close (Esc)">✕</button>
+    </div>
+    <p class="muted small">Checks the tab's largest image (Largest Contentful Paint) and images that can shift the layout while the page loads (Cumulative Layout Shift), two of Google's Core Web Vitals.</p>
+    <section id="speedLcp" class="speed-block"></section>
+    <section id="speedCls" class="speed-block"></section>
+    <div class="import-row end">
+      <button id="speedCsv">Save as CSV</button>
+    </div>
+  </dialog>
+
+  <dialog id="tilesDialog" class="import-dialog">
+    <h3>Split into tiles</h3>
+    <p class="muted small">Cuts the image into equal tiles, numbered left to right and top to bottom. Every pixel is kept.</p>
+    <div class="import-row">
+      <label>Preset
+        <select id="tilesPreset">
+          <option value="3x1">Instagram carousel (3 × 1)</option>
+          <option value="2x1">Two-slide carousel (2 × 1)</option>
+          <option value="3x3">Instagram grid (3 × 3)</option>
+          <option value="2x2">2 × 2</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <label>Columns <input id="tilesCols" type="number" min="1" max="12" value="3"></label>
+      <label>Rows <input id="tilesRows" type="number" min="1" max="12" value="1"></label>
+    </div>
+    <p id="tilesInfo" class="muted small"></p>
+    <div class="import-row end">
+      <button id="tilesCancel">Cancel</button>
+      <button id="tilesSave" class="primary">Save tiles (.zip)</button>
+    </div>
+  </dialog>
+
+  <dialog id="mockupDialog" class="import-dialog mockup-dialog">
+    <div class="dialog-head">
+      <h3>Beautify / mockup</h3>
+      <button id="mockupClose" title="Close (Esc)">✕</button>
+    </div>
+    <div class="mockup-preview checker"><img id="mockupPreview" alt="Preview"></div>
+    <div class="import-row">
+      <label>Background
+        <select id="mockupBg">
+          <option value="violet">Violet</option>
+          <option value="ocean">Ocean</option>
+          <option value="sunset">Sunset</option>
+          <option value="mint">Mint</option>
+          <option value="light">Light grey</option>
+          <option value="dark">Dark</option>
+          <option value="none">Transparent</option>
+        </select>
+      </label>
+      <label>Padding <input id="mockupPad" type="range" min="0" max="25" value="8"></label>
+      <label>Corners <input id="mockupRadius" type="range" min="0" max="48" value="14"></label>
+    </div>
+    <div class="import-row">
+      <label><input id="mockupBar" type="checkbox" checked> Browser window</label>
+      <label><input id="mockupShadow" type="checkbox" checked> Shadow</label>
+      <label><input id="mockupDark" type="checkbox"> Dark window</label>
+    </div>
+    <div class="import-row end">
+      <button id="mockupCopy">Copy image</button>
+      <button id="mockupSave" class="primary">Download PNG</button>
+    </div>
   </dialog>
 
   <dialog id="shortcutsDialog" class="import-dialog shortcuts-dialog">

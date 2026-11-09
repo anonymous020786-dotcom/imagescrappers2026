@@ -1,5 +1,6 @@
 // Pure helpers shared by the dashboard, background worker and unit tests.
 import { colorSortKey } from './props.js';
+import { BLURRY_BELOW } from './quality.js';
 import { rightsClass } from './rights.js';
 
 export const IMAGE_TYPES = ['jpg', 'png', 'gif', 'webp', 'svg', 'avif', 'jxl', 'heic', 'bmp', 'ico', 'tiff', 'other'];
@@ -275,6 +276,10 @@ export function hasProperty(img, prop) {
     case 'animated': return img.animated === true;
     case 'still': return img.animated === false;
     case 'broken': return Boolean(img.broken);
+    case 'blurry': return Number.isFinite(img.sharpness) && img.sharpness < BLURRY_BELOW;
+    case 'sharp': return Number.isFinite(img.sharpness) && img.sharpness >= BLURRY_BELOW;
+    case 'progressive': return img.encoding?.format === 'jpeg' && img.encoding.progressive === true;
+    case 'baseline': return img.encoding?.format === 'jpeg' && img.encoding.progressive === false;
     default: return true;
   }
 }

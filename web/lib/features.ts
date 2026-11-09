@@ -27,7 +27,9 @@ const INTROS: Record<string, string> = {
   credit: 'Find who made an image and under which licence, then prepare whole selections for social media, the web or print in one step.',
   seo: 'A built-in image SEO audit for marketers and developers: alt text, file names, sharing images, structured data and a Google image sitemap.',
   developer:
-    'New in version 1.7: tools for web developers and designers, from a broken image checker and a page weight report to favicon packs, responsive image sets and an on-page size inspector.',
+    'Added in version 1.7: tools for web developers and designers, from a broken image checker and a page weight report to favicon packs, responsive image sets and an on-page size inspector.',
+  speed:
+    'New in version 1.8: Core Web Vitals checks for the LCP image and layout shift, sharpness and encoding analysis, palettes for design apps, lazy-loading placeholders, sprite sheets and one-click image fixes such as trimming, background removal, tiles and mockups.',
   browser: 'Image Scraper Pro fits into the way you already browse, with right-click menus, keyboard commands and settings that follow you across devices.',
 };
 
@@ -44,6 +46,7 @@ const KEYS: [RegExp, string][] = [
   [/^Credit/, 'credit'],
   [/^Image SEO/, 'seo'],
   [/^Developer/, 'developer'],
+  [/^Page speed/, 'speed'],
   [/^Browser/, 'browser'],
 ];
 
@@ -79,7 +82,7 @@ export function getFeatureGroups(): FeatureGroup[] {
       else if (/^- /.test(line)) extras.push(line.slice(2));
     }
     // Bullet lists (Browser integration) are features too, numbered after the last one.
-    groups.push({ id: key, name: nm[1], note: nm[2], intro: INTROS[key] ?? '', features, extras, isNew: key === 'developer' });
+    groups.push({ id: key, name: nm[1], note: nm[2], intro: INTROS[key] ?? '', features, extras, isNew: key === 'speed' });
   }
   let next = Math.max(...groups.flatMap((g) => g.features.map((f) => f.n))) + 1;
   for (const g of groups) {

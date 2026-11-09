@@ -2,12 +2,18 @@ import { api, isScriptableUrl } from '../lib/browser.js';
 import { applyTheme, loadSettings, saveSettings } from '../lib/settings.js';
 import { callInTab, scanTab, scanTabs } from '../lib/scanner.js';
 import {
-  analyze, convert, copyImageToClipboard, fetchBlob, paletteOf, pdfImage, pixelsOf, prepareImage, removeMetadata, renderContactSheet, resizeActive,
-  squarePng,
+  analyze, convert, copyImageToClipboard, fetchBlob, imagePixels, paletteOf, pdfImage, pixelsOf, pixelsToBlob, prepareImage, removeMetadata,
+  renderContactSheet, renderMockup, resizeActive, squarePng,
 } from '../lib/imaging.js';
+import { BLURRY_BELOW, describeEncoding, histogram } from '../lib/quality.js';
+import { MOCKUP_BACKGROUNDS, mockupLayout, removeBackground, tileGrid, trimBounds } from '../lib/pixels.js';
+import { SPRITE_MAX_SIDE, packSprite, spriteCss, spriteDemo, uniqueNames } from '../lib/sprite.js';
+import { averageColour, encodeBlurhash } from '../lib/blurhash.js';
+import { contrastRatio, toAse, toGpl, toTailwind, toTokens, wcag } from '../lib/colorx.js';
+import { clsRating, lcpChecks, sizeFix, unsizedImages, vitalsToCSV } from '../lib/vitals.js';
 import { ICO_SIZES, PNG_ICONS, buildIco, faviconHtml, webManifest } from '../lib/favicon.js';
 import { hasTransparency, pixelDifference } from '../lib/props.js';
-import { brokenToCSV, metadataToCSV, weightReport } from '../lib/reports.js';
+import { brokenToCSV, metadataToCSV, savingsSummary, savingsToCSV, weightReport } from '../lib/reports.js';
 import { responsiveSnippet, responsiveWidths } from '../lib/responsive.js';
 import { optimizeSvg } from '../lib/svg.js';
 import { SIZE_PRESETS, planActive, planFromSettings } from '../lib/prepare.js';
@@ -1102,6 +1108,9 @@ $('exportMenu').onclick = async (e) => {
   if (fmt === 'sitemap') return saveImageSitemap(list);
   if (fmt === 'metadata') return exportMetadata(list);
   if (fmt === 'broken') return exportBroken(list);
+  if (fmt === 'savings') return exportSavings(list);
+  if (fmt === 'placeholders') return exportPlaceholders(list);
+  if (fmt === 'sprite') return exportSprite(list);
   if (fmt === 'sheet') {
     if (!(await needAllSites())) return;
     return createContactSheet(list);
@@ -1159,6 +1168,8 @@ function openLightbox(index) {
     ['Displayed at', img.displayWidth ? `${img.displayWidth} × ${img.displayHeight} px` : '—'],
     ['Type', img.type.toUpperCase()],
     ['File size', formatBytes(img.bytes)],
+    ...(img.encoding ? [['Encoding', describeEncoding(img.encoding)]] : []),
+    ...(Number.isFinite(img.sharpness) ? [['Sharpness', `${img.sharpness.toLocaleString()}${img.sharpness < BLURRY_BELOW ? ' (low: may be blurry)' : ''}`]] : []),
     ['Found in', (img.sources ?? [img.source]).map((s) => SOURCE_LABELS[s] ?? s).join(', ')],
     ['Colour', img.color ?? '—'],
     ['Alt text', img.alt || '—'],
@@ -1179,7 +1190,7 @@ function openLightbox(index) {
   $('lbSelect').textContent = img.selected ? 'Deselect' : 'Select';
   $('lbHighlight').disabled = img.tabId == null;
   $('lbFrames').classList.toggle('hidden', img.type !== 'gif' || !canExtractFrames());
-  for (const id of ['lbExif', 'lbPalette']) {
+  for (const id of ['lbExif', 'lbPalette', 'lbHisto']) {
     $(id).classList.add('hidden');
     $(id).replaceChildren();
   }
@@ -1187,6 +1198,7 @@ function openLightbox(index) {
 }
 
 function closeLightbox() {
+  stopSlideshow();
   $('lightbox').classList.add('hidden');
   $('lbImg').removeAttribute('src');
   state.lightboxIndex = -1;
@@ -2150,6 +2162,7 @@ $('lbColours').onclick = async () => {
     const row = el('div', 'lb-actions');
     row.append(css, hexes);
     box.append(grid, row);
+    paletteExtras(box, colours, img);
   }
   box.classList.remove('hidden');
 };
@@ -2368,7 +2381,7 @@ $('compareDialog').addEventListener('close', closeCompare);
 // Keyboard shortcuts panel.
 const SHORTCUTS = [
   ['Dashboard', [['/', 'Search the images'], ['Ctrl+A', 'Select all visible'], ['Ctrl+C', 'Copy the selected URLs'], ['D', 'Download the selection'], ['Z', 'Download the selection as ZIP'], ['R', 'Rescan the page'], ['Del', 'Remove the selection from the results'], ['Esc', 'Clear the selection'], ['?', 'Show this list']]],
-  ['Preview', [['← →', 'Previous / next image'], ['Space', 'Select or deselect'], ['+ −', 'Zoom in / out'], ['S', 'Save to a collection'], ['Esc', 'Close the preview']]],
+  ['Preview', [['← →', 'Previous / next image'], ['Space', 'Select or deselect'], ['+ −', 'Zoom in / out'], ['S', 'Save to a collection'], ['P', 'Play or pause the slideshow'], ['Esc', 'Close the preview']]],
   ['Browser', [['Alt+Shift+I', 'Open the popup'], ['Alt+Shift+O', 'Open the dashboard for this tab'], ['Alt+Shift+D', 'Quick download with your default filters']]],
 ];
 function openShortcuts() {
@@ -2501,6 +2514,466 @@ if ('EyeDropper' in window) {
   };
 }
 
+// ------------------------------------------------------------- tools (1.8)
+
+const savePng = (blob, name) => saveBlob(blob, name);
+const extOf = (mime) => ({ 'image/jpeg': 'jpg', 'image/webp': 'webp' })[mime] ?? 'png';
+const blobToDataUrl = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+const rasterOnly = (list) => list.filter((i) => i.type !== 'svg' && !i.url.startsWith('blob:') && !i.broken);
+
+// Histogram and exposure check of the image in the preview.
+$('lbHistogram').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  let h;
+  try {
+    h = histogram((await imagePixels(await fetchBlob(img), 512)).data);
+  } catch (err) {
+    return toast(`Could not read the image: ${err.message}`);
+  }
+  if (lbImage() !== img) return;
+  const box = $('lbHisto');
+  box.replaceChildren(el('h4', '', 'Histogram'));
+  const c = document.createElement('canvas');
+  c.className = 'histogram';
+  c.width = 256;
+  c.height = 100;
+  const ctx = c.getContext('2d');
+  const peak = Math.max(1, ...h.r, ...h.g, ...h.b);
+  ctx.globalCompositeOperation = 'lighter';
+  for (const [bins, colour] of [[h.r, 'rgba(230,60,60,.75)'], [h.g, 'rgba(60,190,90,.75)'], [h.b, 'rgba(70,110,240,.75)']]) {
+    ctx.fillStyle = colour;
+    for (let v = 0; v < 256; v++) {
+      const bar = Math.round((bins[v] / peak) * 100);
+      ctx.fillRect(v, 100 - bar, 1, bar);
+    }
+  }
+  box.append(c);
+  const dl = el('dl', 'histo-stats');
+  for (const [k, v] of [
+    ['Exposure', h.verdict],
+    ['Average brightness', `${h.mean} / 255`],
+    ['Contrast', String(h.contrast)],
+    ['Pure black', `${(h.shadows * 100).toFixed(1)}%`],
+    ['Pure white', `${(h.highlights * 100).toFixed(1)}%`],
+  ]) dl.append(el('dt', '', k), el('dd', '', v));
+  box.append(dl);
+  box.classList.remove('hidden');
+};
+
+// Palette extras: a WCAG contrast checker between any two colours, and exports for design apps.
+function paletteExtras(box, colours, img) {
+  const options = [...colours.map((c) => c.hex), '#ffffff', '#000000'];
+  const pick = (value) => {
+    const s = document.createElement('select');
+    for (const hex of options) s.append(new Option(hex === '#ffffff' ? 'White' : hex === '#000000' ? 'Black' : hex, hex));
+    s.value = value;
+    return s;
+  };
+  const fg = pick(colours[0].hex);
+  const bg = pick(textColorFor(colours[0].rgb)); // black behind light colours, white behind dark ones
+  fg.dataset.contrast = 'fg';
+  bg.dataset.contrast = 'bg';
+  const sample = el('div', 'contrast-sample', 'Aa Sample text');
+  const result = el('p', 'contrast-result small');
+  const update = () => {
+    const ratio = contrastRatio(fg.value, bg.value);
+    const w = wcag(ratio);
+    sample.style.color = fg.value;
+    sample.style.background = bg.value;
+    const mark = (ok) => (ok ? '✓' : '✗');
+    result.textContent = `${ratio}:1 · Normal text AA ${mark(w.normalAA)} AAA ${mark(w.normalAAA)} · Large text AA ${mark(w.largeAA)} AAA ${mark(w.largeAAA)}`;
+    result.dataset.ratio = String(ratio);
+  };
+  fg.onchange = update;
+  bg.onchange = update;
+  const pickers = el('div', 'contrast-row');
+  pickers.append(el('span', 'small', 'Text'), fg, el('span', 'small', 'on'), bg);
+  box.append(el('h4', '', 'Contrast check (WCAG)'), pickers, sample, result);
+  update();
+
+  const title = `${imageBase(img)} palette`;
+  const exports = el('div', 'lb-actions');
+  for (const [label, file, make, type] of [
+    ['GIMP / Inkscape (.gpl)', 'palette.gpl', () => toGpl(colours, title), 'text/plain'],
+    ['Adobe (.ase)', 'palette.ase', () => toAse(colours), 'application/octet-stream'],
+    ['Tailwind (.css)', 'palette-tailwind.css', () => toTailwind(colours), 'text/css'],
+    ['Design tokens (.json)', 'palette.tokens.json', () => toTokens(colours), 'application/json'],
+  ]) {
+    const b = el('button', '', label);
+    b.dataset.paletteExport = file;
+    b.onclick = () => {
+      saveBlob(new Blob([make()], { type }), `${imageBase(img)}-${file}`);
+      toast(`Saved ${file}`);
+    };
+    exports.append(b);
+  }
+  box.append(el('h4', '', 'Save the palette'), exports);
+}
+
+// Trim borders: removes plain rows and columns around the image.
+$('lbTrim').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  try {
+    const blob = await fetchBlob(img);
+    const { data, width, height } = await imagePixels(blob);
+    const box = trimBounds(data, width, height, 12);
+    if (!box) return toast('The image is a single colour: nothing to keep');
+    if (box.width === width && box.height === height) return toast('No plain border to trim');
+    const mime = blob.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+    const out = await pixelsToBlob(data, width, height, mime, settings.jpegQuality, box);
+    await savePng(out, `${imageBase(img)}-trimmed.${extOf(mime)}`);
+    toast(`Trimmed from ${width}×${height} to ${box.width}×${box.height} px`);
+  } catch (err) {
+    toast(`Could not trim the image: ${err.message}`);
+  }
+};
+
+// Remove background: a solid colour around the subject becomes transparent.
+$('lbRemoveBg').onclick = async () => {
+  if (!(await needAllSites())) return;
+  const img = lbImage();
+  try {
+    const { data, width, height } = await imagePixels(await fetchBlob(img));
+    const removed = removeBackground(data, width, height, 32);
+    if (!removed) return toast('No solid background colour found at the edges of this image');
+    await savePng(await pixelsToBlob(data, width, height, 'image/png'), `${imageBase(img)}-no-background.png`);
+    toast(`Background removed: ${Math.round((removed / (width * height)) * 100)}% of the pixels are now transparent (PNG)`);
+  } catch (err) {
+    toast(`Could not remove the background: ${err.message}`);
+  }
+};
+
+// Split into tiles.
+const tilesState = { img: null };
+function tilesInfo() {
+  const img = tilesState.img;
+  const cols = Math.max(1, Math.min(12, Number($('tilesCols').value) || 1));
+  const rows = Math.max(1, Math.min(12, Number($('tilesRows').value) || 1));
+  $('tilesInfo').textContent = img?.width
+    ? `${cols * rows} tiles of about ${Math.round(img.width / cols)} × ${Math.round(img.height / rows)} px`
+    : `${cols * rows} tiles`;
+  return { cols, rows };
+}
+$('lbTiles').onclick = () => {
+  tilesState.img = lbImage();
+  tilesInfo();
+  $('tilesDialog').showModal();
+};
+$('tilesPreset').onchange = () => {
+  const v = $('tilesPreset').value;
+  if (v !== 'custom') [$('tilesCols').value, $('tilesRows').value] = v.split('x');
+  tilesInfo();
+};
+for (const id of ['tilesCols', 'tilesRows']) {
+  $(id).oninput = () => {
+    $('tilesPreset').value = 'custom';
+    tilesInfo();
+  };
+}
+$('tilesCancel').onclick = () => $('tilesDialog').close();
+$('tilesSave').onclick = async () => {
+  const img = tilesState.img;
+  const { cols, rows } = tilesInfo();
+  $('tilesDialog').close();
+  if (!(await needAllSites())) return;
+  try {
+    const blob = await fetchBlob(img);
+    const { data, width, height } = await imagePixels(blob);
+    if (cols > width || rows > height) return toast('The image is too small for that many tiles');
+    const mime = blob.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+    const zip = new ZipWriter();
+    const now = new Date();
+    const tiles = tileGrid(width, height, cols, rows);
+    for (const [i, t] of tiles.entries()) {
+      const out = await pixelsToBlob(data, width, height, mime, settings.jpegQuality, t);
+      zip.add(`${imageBase(img)}-${String(i + 1).padStart(2, '0')}.${extOf(mime)}`, new Uint8Array(await out.arrayBuffer()), now);
+    }
+    await saveBlob(new Blob([zip.finish()], { type: 'application/zip' }), `${imageBase(img)}-tiles-${cols}x${rows}.zip`);
+    toast(`Saved ${tiles.length} tiles (${cols} × ${rows}), numbered left to right, top to bottom`);
+  } catch (err) {
+    toast(`Could not split the image: ${err.message}`);
+  }
+};
+
+// Beautify / mockup: the image on a background with padding, rounded corners, a shadow and a window bar.
+const mockup = { img: null, blob: null, size: null, out: null, url: '', seq: 0 };
+async function drawMockup() {
+  const seq = ++mockup.seq;
+  const { width, height } = mockup.size;
+  const scale = Math.max(1, width / 800);
+  const layout = mockupLayout(width, height, {
+    padding: Number($('mockupPad').value) / 100,
+    windowBar: $('mockupBar').checked,
+    radius: Math.round(Number($('mockupRadius').value) * scale),
+  });
+  const out = await renderMockup(mockup.blob, layout, {
+    colours: MOCKUP_BACKGROUNDS[$('mockupBg').value],
+    shadow: $('mockupShadow').checked,
+    dark: $('mockupDark').checked,
+  });
+  if (seq !== mockup.seq) return;
+  mockup.out = out;
+  if (mockup.url) URL.revokeObjectURL(mockup.url);
+  mockup.url = URL.createObjectURL(out);
+  $('mockupPreview').src = mockup.url;
+  $('mockupPreview').dataset.size = `${layout.width}x${layout.height}`;
+}
+$('lbMockup').onclick = async () => {
+  if (!(await needAllSites())) return;
+  mockup.img = lbImage();
+  try {
+    mockup.blob = await fetchBlob(mockup.img);
+    mockup.size = (await imagePixels(mockup.blob, 1)).natural;
+    $('mockupDialog').showModal();
+    await drawMockup();
+  } catch (err) {
+    toast(`Could not open the image: ${err.message}`);
+  }
+};
+for (const id of ['mockupBg', 'mockupPad', 'mockupRadius', 'mockupBar', 'mockupShadow', 'mockupDark']) {
+  $(id).addEventListener('input', debounce(() => drawMockup().catch((err) => toast(err.message)), 120));
+}
+$('mockupClose').onclick = () => $('mockupDialog').close();
+$('mockupSave').onclick = async () => {
+  if (!mockup.out) return;
+  await savePng(mockup.out, `${imageBase(mockup.img)}-mockup.png`);
+  toast('Mockup saved (PNG)');
+};
+$('mockupCopy').onclick = async () => {
+  if (!mockup.out) return;
+  try {
+    await copyImageToClipboard(mockup.out);
+    toast('Mockup copied to the clipboard');
+  } catch (err) {
+    toast(`Could not copy: ${err.message}`);
+  }
+};
+
+// Slideshow: plays the selected images (or all shown) in the preview, full screen when the browser allows it.
+const slideshow = { timer: 0, indexes: null };
+function stopSlideshow() {
+  clearInterval(slideshow.timer);
+  slideshow.timer = 0;
+  slideshow.indexes = null;
+  $('lbPlay').textContent = '▶ Play';
+  $('lbPlay').classList.remove('active');
+  if (document.fullscreenElement === $('lightbox')) document.exitFullscreen().catch(() => {});
+}
+function nextSlide() {
+  const list = slideshow.indexes ?? state.view.map((_, i) => i);
+  if (!list.length) return stopSlideshow();
+  const at = list.indexOf(state.lightboxIndex);
+  openLightbox(list[(at + 1) % list.length]);
+}
+function startSlideshow(indexes) {
+  clearInterval(slideshow.timer);
+  slideshow.indexes = indexes;
+  const seconds = Math.max(1, Number(settings.slideshowSeconds) || 3);
+  slideshow.timer = setInterval(nextSlide, seconds * 1000);
+  $('lbPlay').textContent = '❚❚ Pause';
+  $('lbPlay').classList.add('active');
+}
+function toggleSlideshow() {
+  if (slideshow.timer) stopSlideshow();
+  else startSlideshow(null);
+}
+$('lbPlay').onclick = toggleSlideshow;
+$('slideshowBtn').onclick = () => {
+  const picked = state.view.map((img, i) => (img.selected ? i : -1)).filter((i) => i >= 0);
+  const indexes = picked.length > 1 ? picked : state.view.map((_, i) => i);
+  if (!indexes.length) return toast('No images to show');
+  openLightbox(indexes[0]);
+  startSlideshow(indexes);
+  if (document.fullscreenEnabled) $('lightbox').requestFullscreen().catch(() => {});
+  toast(`Slideshow of ${indexes.length.toLocaleString()} images. P pauses, Esc stops.`);
+};
+
+// WebP savings report: converts each image on the device and measures the difference.
+async function exportSavings(list) {
+  if (!(await needAllSites())) return;
+  const todo = rasterOnly(list).filter((i) => !i.animated);
+  if (!todo.length) return toast('No JPEG, PNG or WebP images to measure');
+  await ensureReferer();
+  const label = 'Measuring WebP savings';
+  const signal = startTask(label);
+  const rows = [];
+  let done = 0;
+  await mapLimit(todo, 4, async (img) => {
+    try {
+      const blob = await fetchBlob(img, signal);
+      const webp = await convert(blob, 'webp', settings.jpegQuality);
+      if (webp.type === 'image/webp') {
+        img.bytes ??= blob.size;
+        img.webpBytes = webp.size; // the audit uses measured savings when they are known
+        rows.push({ img, bytes: blob.size, webpBytes: webp.size });
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+    }
+    progress(++done, todo.length, label);
+  }, signal);
+  endTask();
+  if (!rows.length) return toast('Could not convert any of these images');
+  rows.sort((a, b) => b.bytes - b.webpBytes - (a.bytes - a.webpBytes));
+  saveBlob(new Blob([savingsToCSV(rows)], { type: 'text/csv' }), `${exportBase('webp-savings', list)}.csv`);
+  const s = savingsSummary(rows);
+  toast(`WebP would save ${formatBytes(s.saved)} (${s.percent}%) on ${s.smaller} of ${s.count} images at quality ${Math.round(settings.jpegQuality * 100)}`);
+}
+
+// Placeholders: BlurHash, a tiny preview (LQIP) and the average colour of each image, for lazy loading.
+async function exportPlaceholders(list) {
+  if (!(await needAllSites())) return;
+  const todo = rasterOnly(list);
+  if (!todo.length) return toast('No raster images to create placeholders for');
+  await ensureReferer();
+  const label = 'Creating placeholders';
+  const signal = startTask(label);
+  const out = [];
+  let done = 0;
+  await mapLimit(todo, 4, async (img) => {
+    try {
+      const blob = await fetchBlob(img, signal);
+      const { data, width, height, natural } = await imagePixels(blob, 32);
+      const wide = natural.width >= natural.height;
+      const tiny = await convert(blob, 'webp', 0.6, { maxWidth: 16, maxHeight: 16 });
+      out.push({
+        url: img.url,
+        width: natural.width,
+        height: natural.height,
+        blurhash: encodeBlurhash(data, width, height, wide ? 4 : 3, wide ? 3 : 4),
+        color: averageColour(data),
+        lqip: await blobToDataUrl(tiny),
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+    }
+    progress(++done, todo.length, label);
+  }, signal);
+  endTask();
+  if (!out.length) return toast('Could not read any of these images');
+  out.sort((a, b) => todo.findIndex((i) => i.url === a.url) - todo.findIndex((i) => i.url === b.url));
+  saveBlob(new Blob([`${JSON.stringify(out, null, 2)}\n`], { type: 'application/json' }), `${exportBase('placeholders', list)}.json`);
+  toast(`Saved placeholders for ${out.length.toLocaleString()} images: BlurHash, a 16 px preview and the average colour`);
+}
+
+// CSS sprite sheet: one PNG plus the CSS (and a demo page) for every selected image.
+async function exportSprite(list) {
+  if (!(await needAllSites())) return;
+  const todo = list.filter((i) => !i.broken).slice(0, 400);
+  if (!todo.length) return toast('No images to pack');
+  await ensureReferer();
+  const label = 'Building sprite sheet';
+  const signal = startTask(label);
+  const parts = new Array(todo.length);
+  let done = 0;
+  await mapLimit(todo, 4, async (img, i) => {
+    try {
+      parts[i] = await imagePixels(await fetchBlob(img, signal), 256);
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+    }
+    progress(++done, todo.length, label);
+  }, signal);
+  endTask();
+  const ok = parts.map((p, i) => (p ? i : -1)).filter((i) => i >= 0);
+  if (!ok.length) return toast('Could not read any of these images');
+  const sheet = packSprite(ok.map((i) => ({ width: parts[i].width, height: parts[i].height })), { padding: 2, maxWidth: 2048 });
+  if (sheet.width > SPRITE_MAX_SIDE || sheet.height > SPRITE_MAX_SIDE) return toast('Too many images for one sprite sheet: select fewer');
+  const c = document.createElement('canvas');
+  c.width = sheet.width;
+  c.height = sheet.height;
+  const ctx = c.getContext('2d');
+  const names = uniqueNames(ok.map((i) => imageBase(todo[i])));
+  const entries = ok.map((i, k) => {
+    const p = parts[i];
+    const at = sheet.positions[k];
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(p.data), p.width, p.height), at.x, at.y);
+    return { name: names[k], ...at };
+  });
+  const png = await new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode the sheet'))), 'image/png'));
+  const zip = new ZipWriter();
+  const now = new Date();
+  const text = new TextEncoder();
+  zip.add('sprite.png', new Uint8Array(await png.arrayBuffer()), now);
+  zip.add('sprite.css', text.encode(spriteCss(entries, 'sprite.png', sheet)), now);
+  zip.add('sprite.html', text.encode(spriteDemo(entries)), now);
+  await saveBlob(new Blob([zip.finish()], { type: 'application/zip' }), `${exportBase('sprite', list)}.zip`);
+  toast(`Sprite sheet saved: ${entries.length} images in ${sheet.width}×${sheet.height} px, with sprite.css and a demo page`);
+}
+
+// Page speed: the LCP image and unsized images (CLS) of the scanned tab.
+let lastSpeed = null;
+$('speedBtn').onclick = async () => {
+  if (state.tab?.id == null) return toast('Open the dashboard from a page to check its speed');
+  let r;
+  try {
+    [r] = await callInTab(state.tab.id, 'speed', [], false);
+  } catch (err) {
+    return toast(`Could not check the page: ${explainScanError(err)}`);
+  }
+  if (!r) return toast('Could not check the page');
+  const unsized = unsizedImages(r.images);
+  lastSpeed = { lcp: r.lcp, unsized, url: r.url };
+
+  const lcpBox = $('speedLcp');
+  lcpBox.replaceChildren(el('h4', '', 'Largest Contentful Paint (LCP) image'));
+  if (r.lcp?.kind === 'image') {
+    const head = el('div', 'speed-lcp');
+    const thumb = document.createElement('img');
+    thumb.src = safeImageSrc(r.lcp.url) ?? '';
+    thumb.alt = '';
+    const meta = el('div');
+    meta.append(el('div', 'audit-url', r.lcp.url), el('div', 'muted small',
+      `${r.lcp.method === 'measured' ? 'Measured by the browser' : 'Estimated: the largest image in the first screen (this browser does not report LCP)'} · shown at ${r.lcp.displayed.width}×${r.lcp.displayed.height}${r.lcp.natural?.width ? `, file ${r.lcp.natural.width}×${r.lcp.natural.height}` : ''}`));
+    head.append(thumb, meta);
+    lcpBox.append(head);
+  }
+  const checks = el('ul', 'speed-checks');
+  for (const c of lcpChecks(r.lcp)) checks.append(el('li', `lvl-${c.level}`, c.text));
+  lcpBox.append(checks);
+
+  const clsBox = $('speedCls');
+  clsBox.replaceChildren(el('h4', '', 'Layout shift (CLS): images without a reserved size'));
+  const rating = clsRating(r.cls);
+  clsBox.append(el('p', `small ${rating ? `lvl-${rating.level}` : 'muted'}`, rating
+    ? `Measured layout shift so far: ${r.cls} (${rating.label}; good is 0.1 or less).`
+    : 'This browser does not report layout shift; the list below still shows the images that can cause it.'));
+  if (!unsized.length) {
+    clsBox.append(el('p', 'small lvl-ok', `All ${r.images.length.toLocaleString()} images have a reserved size (width and height, or aspect-ratio).`));
+  } else {
+    clsBox.append(el('p', 'small', `${unsized.length.toLocaleString()} of ${r.images.length.toLocaleString()} images have no width and height, so the page jumps when they load. Add the attributes shown:`));
+    const listEl = el('div', 'audit-list');
+    for (const i of unsized.slice(0, 100)) {
+      const row = el('div', 'audit-row');
+      const fix = sizeFix(i);
+      const copy = el('button', '', 'Copy');
+      copy.title = 'Copy the attributes to add';
+      copy.onclick = async () => {
+        await navigator.clipboard.writeText(fix);
+        toast(`Copied ${fix}`);
+      };
+      row.append(el('span', `badge ${i.aboveFold ? 'lvl-bad' : 'lvl-warn'}`, i.aboveFold ? 'First screen' : 'Below'), el('span', 'audit-url', i.url), el('code', '', fix), copy);
+      listEl.append(row);
+    }
+    clsBox.append(listEl);
+  }
+  $('speedDialog').showModal();
+};
+$('speedClose').onclick = () => $('speedDialog').close();
+$('speedCsv').onclick = () => {
+  if (!lastSpeed) return;
+  saveBlob(new Blob([vitalsToCSV(lastSpeed)], { type: 'text/csv' }), `${exportBase('page-speed')}.csv`);
+  toast('Page speed report saved');
+};
+
 // ------------------------------------------------------------ keyboard
 
 document.addEventListener('keydown', (e) => {
@@ -2511,6 +2984,7 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeLightbox();
     else if (e.key === 'ArrowLeft') stepLightbox(-1);
     else if (e.key === 'ArrowRight') stepLightbox(1);
+    else if (e.key === 'p' || e.key === 'P') toggleSlideshow();
     else if (e.key === ' ') {
       e.preventDefault();
       $('lbSelect').click();
